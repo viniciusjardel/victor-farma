@@ -2,10 +2,26 @@ const express = require('express');
 const router = express.Router();
 
 module.exports = (pool) => {
+  // Registrar/criar usuário se não existir
+  const ensureUserExists = async (userId) => {
+    try {
+      await pool.query(
+        'INSERT INTO users (id, name, email, phone) VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING',
+        [userId, `User ${userId}`, null, null]
+      );
+    } catch (error) {
+      console.error('Erro ao criar usuário:', error);
+    }
+  };
+
   // Obter carrinho do usuário
   router.get('/:userId', async (req, res) => {
     try {
       const { userId } = req.params;
+
+      // Garantir que usuário existe
+      await ensureUserExists(userId);
+
       const result = await pool.query(
         `SELECT ci.id, ci.product_id, p.name, p.price, ci.quantity, (p.price * ci.quantity) as subtotal
          FROM cart_items ci
@@ -25,6 +41,9 @@ module.exports = (pool) => {
     try {
       const { userId } = req.params;
       const { productId, quantity } = req.body;
+
+      // Garantir que usuário existe
+      await ensureUserExists(userId);
 
       // Verificar se produto existe e tem estoque
       const productCheck = await pool.query('SELECT stock FROM products WHERE id = $1', [productId]);

@@ -1,7 +1,7 @@
 // URL da API (configure com a URL do Render em produção)
 const API_URL = window.location.hostname === 'localhost'
   ? 'http://localhost:3000/api'
-  : 'https://seu-backend-render.onrender.com/api'; // Substituir com URL real do Render
+  : 'https://victor-farma.onrender.com/api';
 
 let currentSection = 'dashboard';
 let allProducts = [];

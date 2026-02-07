@@ -1,6 +1,6 @@
 -- Tabela de usuários
 CREATE TABLE users (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  id VARCHAR(255) PRIMARY KEY,
   name VARCHAR(255) NOT NULL,
   email VARCHAR(255) UNIQUE,
   phone VARCHAR(20),
@@ -23,18 +23,17 @@ CREATE TABLE products (
 -- Tabela de itens do carrinho
 CREATE TABLE cart_items (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id UUID NOT NULL,
+  user_id VARCHAR(255) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   product_id UUID NOT NULL REFERENCES products(id),
   quantity INT NOT NULL DEFAULT 1,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
   UNIQUE(user_id, product_id)
 );
 
 -- Tabela de pedidos
 CREATE TABLE orders (
   id UUID PRIMARY KEY,
-  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  user_id VARCHAR(255) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   customer_name VARCHAR(255) NOT NULL,
   customer_phone VARCHAR(20),
   delivery_address TEXT NOT NULL,

@@ -5,12 +5,19 @@ module.exports = (pool) => {
   // Registrar/criar usuário se não existir
   const ensureUserExists = async (userId) => {
     try {
-      await pool.query(
-        'INSERT INTO users (id, name, email, phone) VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING',
-        [userId, `User ${userId}`, null, null]
-      );
+      // Verificar se usuário existe
+      const userExists = await pool.query('SELECT id FROM users WHERE id = $1', [userId]);
+      
+      // Se não existe, criar
+      if (userExists.rows.length === 0) {
+        await pool.query(
+          'INSERT INTO users (id, name, email, phone) VALUES ($1, $2, $3, $4)',
+          [userId, `User ${userId}`, null, null]
+        );
+      }
     } catch (error) {
       console.error('Erro ao criar usuário:', error);
+      throw error;
     }
   };
 

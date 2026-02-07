@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Victor Farma - Painel Administrativo</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="container">
+    <aside class="sidebar">
+      <div class="logo">
+        <h1>Victor Farma</h1>
+        <p>Admin</p>
+      </div>
+      <nav class="sidebar-nav">
+        <button class="nav-btn active" data-section="dashboard">📊 Dashboard</button>
+        <button class="nav-btn" data-section="products">📦 Produtos</button>
+        <button class="nav-btn" data-section="orders">📋 Pedidos</button>
+        <button class="nav-btn" data-section="reports">📈 Relatórios</button>
+      </nav>
+    </aside>
+
+    <main class="main-content">
+      <header class="top-header">
+        <h2>Painel de Administração</h2>
+        <div class="header-info">
+          <span id="current-time"></span>
+        </div>
+      </header>
+
+      <!-- Dashboard Section -->
+      <section id="dashboard-section" class="section active">
+        <h3>Dashboard</h3>
+        <div class="dashboard-grid">
+          <div class="dashboard-card">
+            <div class="card-label">Total de Pedidos</div>
+            <div class="card-value" id="total-orders">0</div>
+          </div>
+          <div class="dashboard-card">
+            <div class="card-label">Receita Total</div>
+            <div class="card-value" id="total-revenue">R$ 0.00</div>
+          </div>
+          <div class="dashboard-card">
+            <div class="card-label">Total de Produtos</div>
+            <div class="card-value" id="total-products">0</div>
+          </div>
+        </div>
+
+        <div class="low-stock-section">
+          <h4>Produtos com Estoque Baixo</h4>
+          <div id="low-stock-list" class="low-stock-list">
+            <p>Carregando...</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- Products Section -->
+      <section id="products-section" class="section">
+        <h3>Gerenciamento de Produtos</h3>
+        
+        <div class="section-controls">
+          <input type="text" id="product-search" placeholder="Buscar produto...">
+          <button onclick="openAddProductModal()" class="btn btn-primary">+ Novo Produto</button>
+        </div>
+
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Nome</th>
+              <th>Descrição</th>
+              <th>Preço</th>
+              <th>Estoque</th>
+              <th>Categoria</th>
+              <th>Ações</th>
+            </tr>
+          </thead>
+          <tbody id="products-tbody">
+            <tr><td colspan="6" class="loading">Carregando...</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <!-- Orders Section -->
+      <section id="orders-section" class="section">
+        <h3>Gerenciamento de Pedidos</h3>
+
+        <div class="section-controls">
+          <select id="order-status-filter">
+            <option value="">Todos os status</option>
+            <option value="pending">Pendente</option>
+            <option value="confirmed">Confirmado</option>
+            <option value="preparing">Preparando</option>
+            <option value="out_for_delivery">Em entrega</option>
+            <option value="delivered">Entregue</option>
+            <option value="cancelled">Cancelado</option>
+          </select>
+        </div>
+
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>ID do Pedido</th>
+              <th>Cliente</th>
+              <th>Telefone</th>
+              <th>Total</th>
+              <th>Status</th>
+              <th>Data</th>
+              <th>Ações</th>
+            </tr>
+          </thead>
+          <tbody id="orders-tbody">
+            <tr><td colspan="7" class="loading">Carregando...</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <!-- Reports Section -->
+      <section id="reports-section" class="section">
+        <h3>Relatórios</h3>
+
+        <div class="reports-container">
+          <div class="report-section">
+            <h4>Vendas Últimos 30 Dias</h4>
+            <div id="sales-report" class="report-list">
+              <p>Carregando...</p>
+            </div>
+          </div>
+
+          <div class="report-section">
+            <h4>Produtos Mais Vendidos</h4>
+            <div id="top-products" class="report-list">
+              <p>Carregando...</p>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- Modais -->
+  <!-- Add/Edit Product Modal -->
+  <div id="product-modal" class="modal hidden">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 id="product-modal-title">Novo Produto</h2>
+        <button class="close-modal">&times;</button>
+      </div>
+      <form id="product-form">
+        <input type="hidden" id="product-id">
+        <div class="form-group">
+          <label>Nome do Produto*</label>
+          <input type="text" id="product-name" required>
+        </div>
+        <div class="form-group">
+          <label>Descrição</label>
+          <textarea id="product-description"></textarea>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Preço (R$)*</label>
+            <input type="number" id="product-price" step="0.01" required>
+          </div>
+          <div class="form-group">
+            <label>Estoque*</label>
+            <input type="number" id="product-stock" min="0" required>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Categoria</label>
+            <select id="product-category">
+              <option value="">Selecione uma categoria</option>
+              <option value="medicamentos">Medicamentos</option>
+              <option value="higiene">Higiene</option>
+              <option value="vitaminas">Vitaminas</option>
+              <option value="cosmeticos">Cosméticos</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>URL da Imagem</label>
+            <input type="url" id="product-image">
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" onclick="closeProductModal()">Cancelar</button>
+          <button type="submit" class="btn btn-primary">Salvar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- View Order Modal -->
+  <div id="order-modal" class="modal hidden">
+    <div class="modal-content large">
+      <div class="modal-header">
+        <h2>Detalhes do Pedido</h2>
+        <button class="close-modal">&times;</button>
+      </div>
+      <div id="order-modal-content">
+        <p>Carregando...</p>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

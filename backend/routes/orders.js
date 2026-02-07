@@ -1,0 +1,173 @@
+const express = require('express');
+const router = express.Router();
+const { v4: uuidv4 } = require('uuid');
+
+module.exports = (pool) => {
+  // Criar pedido
+  router.post('/', async (req, res) => {
+    try {
+      const { userId, items, customerName, customerPhone, deliveryAddress, paymentMethod } = req.body;
+
+      // Validar dados
+      if (!userId || !items || items.length === 0 || !customerName || !deliveryAddress) {
+        return res.status(400).json({ error: 'Dados inválidos' });
+      }
+
+      // Calcular total
+      let total = 0;
+      for (const item of items) {
+        const productResult = await pool.query('SELECT price FROM products WHERE id = $1', [item.productId]);
+        if (productResult.rows.length === 0) {
+          return res.status(404).json({ error: `Produto ${item.productId} não encontrado` });
+        }
+        total += productResult.rows[0].price * item.quantity;
+      }
+
+      // Criar pedido
+      const orderId = uuidv4();
+      const createdAt = new Date().toISOString();
+      
+      const orderResult = await pool.query(
+        `INSERT INTO orders (id, user_id, customer_name, customer_phone, delivery_address, total, payment_method, status, created_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+         RETURNING *`,
+        [orderId, userId, customerName, customerPhone, deliveryAddress, total, paymentMethod, 'pending', createdAt]
+      );
+
+      // Adicionar itens do pedido
+      for (const item of items) {
+        const productResult = await pool.query('SELECT price FROM products WHERE id = $1', [item.productId]);
+        const price = productResult.rows[0].price;
+
+        await pool.query(
+          `INSERT INTO order_items (id, order_id, product_id, quantity, price)
+           VALUES ($1, $2, $3, $4, $5)`,
+          [uuidv4(), orderId, item.productId, item.quantity, price]
+        );
+
+        // Atualizar estoque
+        await pool.query(
+          'UPDATE products SET stock = stock - $1 WHERE id = $2',
+          [item.quantity, item.productId]
+        );
+      }
+
+      // Limpar carrinho
+      await pool.query('DELETE FROM cart_items WHERE user_id = $1', [userId]);
+
+      // Gerar QR Code PIX (simulado)
+      const pixQRCode = generatePixQRCode(total, orderId);
+
+      res.status(201).json({
+        order: orderResult.rows[0],
+        pixQRCode: pixQRCode,
+        message: 'Pedido criado com sucesso'
+      });
+    } catch (error) {
+      console.error(error);
+      res.status(500).json({ error: 'Erro ao criar pedido' });
+    }
+  });
+
+  // Buscar pedido por ID
+  router.get('/:orderId', async (req, res) => {
+    try {
+      const { orderId } = req.params;
+      const orderResult = await pool.query('SELECT * FROM orders WHERE id = $1', [orderId]);
+      
+      if (orderResult.rows.length === 0) {
+        return res.status(404).json({ error: 'Pedido não encontrado' });
+      }
+
+      const itemsResult = await pool.query(
+        `SELECT oi.id, oi.product_id, p.name, oi.quantity, oi.price, (oi.quantity * oi.price) as subtotal
+         FROM order_items oi
+         JOIN products p ON oi.product_id = p.id
+         WHERE oi.order_id = $1`,
+        [orderId]
+      );
+
+      res.json({
+        order: orderResult.rows[0],
+        items: itemsResult.rows
+      });
+    } catch (error) {
+      console.error(error);
+      res.status(500).json({ error: 'Erro ao buscar pedido' });
+    }
+  });
+
+  // Listar pedidos do usuário
+  router.get('/user/:userId', async (req, res) => {
+    try {
+      const { userId } = req.params;
+      const result = await pool.query(
+        'SELECT * FROM orders WHERE user_id = $1 ORDER BY created_at DESC',
+        [userId]
+      );
+      res.json(result.rows);
+    } catch (error) {
+      console.error(error);
+      res.status(500).json({ error: 'Erro ao buscar pedidos' });
+    }
+  });
+
+  // Atualizar status do pedido (admin)
+  router.patch('/:orderId/status', async (req, res) => {
+    try {
+      const { orderId } = req.params;
+      const { status } = req.body;
+
+      const validStatuses = ['pending', 'confirmed', 'preparing', 'out_for_delivery', 'delivered', 'cancelled'];
+      if (!validStatuses.includes(status)) {
+        return res.status(400).json({ error: 'Status inválido' });
+      }
+
+      const result = await pool.query(
+        'UPDATE orders SET status = $1 WHERE id = $2 RETURNING *',
+        [status, orderId]
+      );
+
+      if (result.rows.length === 0) {
+        return res.status(404).json({ error: 'Pedido não encontrado' });
+      }
+
+      res.json(result.rows[0]);
+    } catch (error) {
+      console.error(error);
+      res.status(500).json({ error: 'Erro ao atualizar pedido' });
+    }
+  });
+
+  // Confirmar pagamento PIX
+  router.post('/:orderId/confirm-payment', async (req, res) => {
+    try {
+      const { orderId } = req.params;
+      const result = await pool.query(
+        'UPDATE orders SET status = $1 WHERE id = $2 RETURNING *',
+        ['confirmed', orderId]
+      );
+
+      if (result.rows.length === 0) {
+        return res.status(404).json({ error: 'Pedido não encontrado' });
+      }
+
+      res.json({ message: 'Pagamento confirmado', order: result.rows[0] });
+    } catch (error) {
+      console.error(error);
+      res.status(500).json({ error: 'Erro ao confirmar pagamento' });
+    }
+  });
+
+  return router;
+};
+
+// Função para gerar QR Code PIX (simulado - em produção usar biblioteca real)
+function generatePixQRCode(amount, orderId) {
+  // Simulação de QR Code
+  return {
+    qrCodeUrl: `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=00020126580014br.gov.bcb.brcode01051.0.063047052025502${orderId}5204000053039865406${amount.toFixed(2)}5802BR5913VICTOR FARMA6009SAO PAULO62410503***63047D91`,
+    amount: amount,
+    orderId: orderId
+  };
+}

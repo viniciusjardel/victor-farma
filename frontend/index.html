@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Victor Farma - Delivery de Farmácia</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header>
+    <div class="header-content">
+      <h1>Victor Farma</h1>
+      <p>Seu delivery de farmácia</p>
+    </div>
+    <nav>
+      <button id="cart-btn" class="cart-button">
+        🛒 Carrinho <span id="cart-count" class="cart-count">0</span>
+      </button>
+    </nav>
+  </header>
+
+  <main>
+    <!-- Seção de filtros -->
+    <div class="filters">
+      <input type="text" id="search-input" placeholder="Buscar produtos...">
+      <select id="category-filter">
+        <option value="">Todas as categorias</option>
+        <option value="medicamentos">Medicamentos</option>
+        <option value="higiene">Higiene</option>
+        <option value="vitaminas">Vitaminas</option>
+        <option value="cosmeticos">Cosméticos</option>
+      </select>
+    </div>
+
+    <!-- Lista de produtos -->
+    <div id="products-container" class="products-container">
+      <p class="loading">Carregando produtos...</p>
+    </div>
+  </main>
+
+  <!-- Modal do carrinho -->
+  <div id="cart-modal" class="modal hidden">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2>Carrinho de Compras</h2>
+        <button class="close-modal">&times;</button>
+      </div>
+      <div id="cart-items" class="cart-items">
+        <p class="empty-cart">Seu carrinho está vazio</p>
+      </div>
+      <div class="cart-footer">
+        <div class="cart-total">
+          <strong>Total:</strong>
+          <span id="cart-total">R$ 0.00</span>
+        </div>
+        <button id="checkout-btn" class="checkout-btn" disabled>Finalizar Compra</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal de checkout -->
+  <div id="checkout-modal" class="modal hidden">
+    <div class="modal-content checkout-modal">
+      <div class="modal-header">
+        <h2>Finalizar Pedido</h2>
+        <button class="close-modal">&times;</button>
+      </div>
+      <form id="checkout-form">
+        <div class="form-group">
+          <label for="customer-name">Nome Completo*</label>
+          <input type="text" id="customer-name" required>
+        </div>
+        <div class="form-group">
+          <label for="customer-phone">Telefone*</label>
+          <input type="tel" id="customer-phone" required>
+        </div>
+        <div class="form-group">
+          <label for="delivery-address">Endereço de Entrega*</label>
+          <textarea id="delivery-address" required></textarea>
+        </div>
+        <button type="submit" class="submit-btn">Prosseguir para Pagamento</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal de pagamento PIX -->
+  <div id="payment-modal" class="modal hidden">
+    <div class="modal-content payment-modal">
+      <div class="modal-header">
+        <h2>Pagamento PIX</h2>
+        <button class="close-modal">&times;</button>
+      </div>
+      <div id="payment-content">
+        <div class="pix-container">
+          <p>Escaneie o QR Code com seu celular para pagar</p>
+          <div id="qr-code-container" class="qr-code-container">
+            <img id="qr-code-image" src="" alt="QR Code PIX">
+          </div>
+          <div class="pix-info">
+            <p>Valor: <strong id="pix-amount">R$ 0.00</strong></p>
+            <p>Pedido ID: <strong id="pix-order-id"></strong></p>
+          </div>
+          <p class="pix-info-text">Após efetuar o pagamento, seu pedido será confirmado automaticamente.</p>
+          <button id="confirm-payment-btn" class="submit-btn">Confirmar Pagamento</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal de confirmação -->
+  <div id="confirmation-modal" class="modal hidden">
+    <div class="modal-content success-modal">
+      <div class="success-icon">✓</div>
+      <h2>Pedido Realizado com Sucesso!</h2>
+      <div id="order-details" class="order-details">
+        <p>Número do Pedido: <strong id="order-id-display"></strong></p>
+        <p>Seu pedido foi recebido e em breve será preparado.</p>
+        <p>Você receberá atualizações por telefone durante a entrega.</p>
+      </div>
+      <button id="back-to-products-btn" class="submit-btn">Voltar para Produtos</button>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

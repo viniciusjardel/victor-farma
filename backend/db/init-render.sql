@@ -39,6 +39,8 @@ CREATE TABLE orders (
   delivery_address TEXT NOT NULL,
   total DECIMAL(10, 2) NOT NULL,
   payment_method VARCHAR(50) NOT NULL DEFAULT 'pix',
+  payment_id VARCHAR(255),
+  payment_status VARCHAR(50),
   status VARCHAR(50) NOT NULL DEFAULT 'pending',
   observations TEXT,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,

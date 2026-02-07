@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { v4: uuidv4 } = require('uuid');
+const axios = require('axios');
 
 module.exports = (pool) => {
   // Criar pedido
@@ -109,6 +110,87 @@ module.exports = (pool) => {
     } catch (error) {
       console.error(error);
       res.status(500).json({ error: 'Erro ao buscar pedidos' });
+    }
+  });
+
+  // Gerar PIX para pagamento
+  router.post('/:orderId/generate-pix', async (req, res) => {
+    try {
+      const { orderId } = req.params;
+
+      // Buscar pedido
+      const orderResult = await pool.query('SELECT * FROM orders WHERE id = $1', [orderId]);
+      if (orderResult.rows.length === 0) {
+        return res.status(404).json({ error: 'Pedido não encontrado' });
+      }
+
+      const order = orderResult.rows[0];
+      
+      // Se já tem payment_id, retorna o existente
+      if (order.payment_id) {
+        return res.json({
+          paymentId: order.payment_id,
+          status: order.payment_status || 'pending',
+          message: 'PIX já gerado'
+        });
+      }
+
+      // Chamar PIX service para gerar novo PIX
+      const pixResponse = await axios.post('https://pix-project.onrender.com/pix', {
+        valor: parseFloat(order.total),
+        descricao: `Pedido #${orderId.slice(0, 8)}`
+      });
+
+      // Salvar payment_id e qr_code no banco
+      const updateResult = await pool.query(
+        'UPDATE orders SET payment_id = $1, payment_status = $2 WHERE id = $3 RETURNING *',
+        [pixResponse.data.id, 'pending', orderId]
+      );
+
+      res.json({
+        paymentId: pixResponse.data.id,
+        qrCode: pixResponse.data.qr_code,
+        qrCodeBase64: pixResponse.data.qr_code_base64,
+        status: 'pending',
+        valor: order.total
+      });
+
+    } catch (error) {
+      console.error('Erro ao gerar PIX:', error.message);
+      res.status(500).json({ error: 'Erro ao gerar PIX' });
+    }
+  });
+
+  // Webhook: PIX service notifica quando pagamento é confirmado
+  router.post('/webhook/payment', async (req, res) => {
+    try {
+      const { paymentId, status, orderId } = req.body;
+
+      if (!paymentId || !status) {
+        return res.status(400).json({ error: 'Dados inválidos' });
+      }
+
+      // Atualizar status do pagamento no pedido
+      const updateResult = await pool.query(
+        'UPDATE orders SET payment_status = $1, status = $2 WHERE payment_id = $3 RETURNING *',
+        [status, status === 'approved' ? 'confirmed' : 'pending', paymentId]
+      );
+
+      if (updateResult.rows.length === 0) {
+        console.warn(`Webhook: Pedido com payment_id ${paymentId} não encontrado`);
+        return res.json({ message: 'Processado' }); // Não retorna erro pro webhook
+      }
+
+      console.log(`✅ Webhook PIX: Pagamento ${paymentId} atualizado para ${status}`);
+
+      res.json({ 
+        message: 'Webhook processado com sucesso',
+        order: updateResult.rows[0]
+      });
+
+    } catch (error) {
+      console.error('Erro no webhook de pagamento:', error.message);
+      res.status(500).json({ error: 'Erro ao processar webhook' });
     }
   });
 

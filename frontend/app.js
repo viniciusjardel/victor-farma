@@ -337,6 +337,9 @@ async function generatePixPayment(orderId, amount) {
 
 // Exibir modal com QR Code PIX
 function displayPixQrModal(pixData, amount, orderId) {
+  // Converter amount para número se for string
+  const valorNumerico = parseFloat(amount);
+  
   // Criar modal
   const modal = document.createElement('div');
   modal.id = 'pix-qr-modal';
@@ -357,7 +360,7 @@ function displayPixQrModal(pixData, amount, orderId) {
         style="width: 280px; height: 280px; margin: 20px auto; border: 2px solid #ddd; border-radius: 10px;">
       
       <p style="color: #666; margin: 20px 0; font-size: 16px;">
-        Valor: <strong>R$ ${amount.toFixed(2)}</strong>
+        Valor: <strong>R$ ${valorNumerico.toFixed(2)}</strong>
       </p>
       
       <p style="color: #999; font-size: 14px; margin: 10px 0;">

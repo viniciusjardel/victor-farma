@@ -243,6 +243,45 @@ module.exports = (pool) => {
     }
   });
 
+  // 🧪 ENDPOINT DE TESTE: Simula webhook de pagamento confirmado (REMOVER EM PRODUÇÃO)
+  router.post('/test-webhook/:orderId', async (req, res) => {
+    try {
+      const { orderId } = req.params;
+      
+      // Buscar pedido para obter payment_id
+      const orderResult = await pool.query('SELECT * FROM orders WHERE id = $1', [orderId]);
+      if (orderResult.rows.length === 0) {
+        return res.status(404).json({ error: 'Pedido não encontrado' });
+      }
+      
+      const order = orderResult.rows[0];
+      const paymentId = order.payment_id;
+      
+      if (!paymentId) {
+        return res.status(400).json({ error: 'Pedido não tem payment_id' });
+      }
+      
+      console.log(`🧪 [TEST] Simulando webhook para orderId: ${orderId}, paymentId: ${paymentId}`);
+      
+      // Chamar o webhook como se fosse o serviço PIX
+      const updateResult = await pool.query(
+        'UPDATE orders SET payment_status = $1, status = $2 WHERE id = $3 RETURNING *',
+        ['approved', 'confirmed', orderId]
+      );
+      
+      console.log(`✅ [TEST] Pedido ${orderId} atualizado para CONFIRMED`);
+      
+      res.json({
+        message: '✅ Pagamento simulado com sucesso',
+        order: updateResult.rows[0]
+      });
+      
+    } catch (error) {
+      console.error('❌ Erro no test-webhook:', error);
+      res.status(500).json({ error: 'Erro ao processar test-webhook' });
+    }
+  });
+
   return router;
 };
 

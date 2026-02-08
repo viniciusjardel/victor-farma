@@ -105,12 +105,12 @@ async function loadDashboard() {
 
     const lowStockList = document.getElementById('low-stock-list');
     if (data.lowStockProducts.length === 0) {
-      lowStockList.innerHTML = '<p>Todos os produtos têm estoque suficiente</p>';
+      lowStockList.innerHTML = '<p class="text-center text-gray-500 py-4">Todos os produtos têm estoque suficiente</p>';
     } else {
       lowStockList.innerHTML = data.lowStockProducts.map(product => `
-        <div class="low-stock-item">
-          <span>${product.name}</span>
-          <span>${product.stock} unidades</span>
+        <div class="flex justify-between items-center p-3 bg-red-50 border-l-4 border-red-600 rounded">
+          <span class="font-semibold text-gray-800">${product.name}</span>
+          <span class="px-3 py-1 bg-red-600 text-white text-sm rounded font-bold">${product.stock} unidades</span>
         </div>
       `).join('');
     }
@@ -135,20 +135,20 @@ function displayProducts(products) {
   const tbody = document.getElementById('products-tbody');
   
   if (products.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="6" class="loading">Nenhum produto encontrado</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="6" class="px-6 py-4 text-center text-gray-500">Nenhum produto encontrado</td></tr>';
     return;
   }
 
   tbody.innerHTML = products.map(product => `
-    <tr>
-      <td>${product.name}</td>
-      <td>${product.description || '-'}</td>
-      <td>R$ ${parseFloat(product.price).toFixed(2)}</td>
-      <td>${product.stock}</td>
-      <td>${product.category || '-'}</td>
-      <td class="actions">
-        <button class="action-btn edit btn-sm" onclick="openEditProductModal('${product.id}')">Editar</button>
-        <button class="action-btn delete btn-sm" onclick="deleteProduct('${product.id}')">Deletar</button>
+    <tr class="border-b border-gray-300 hover:bg-gray-50 text-sm">
+      <td class="px-6 py-4 font-medium text-gray-900">${product.name}</td>
+      <td class="px-6 py-4 text-gray-600 truncate">${product.description || '-'}</td>
+      <td class="px-6 py-4 font-bold text-red-600">R$ ${parseFloat(product.price).toFixed(2)}</td>
+      <td class="px-6 py-4 text-gray-700">${product.stock}</td>
+      <td class="px-6 py-4 text-gray-600">${product.category || '-'}</td>
+      <td class="px-6 py-4 flex gap-2">
+        <button class="px-3 py-1 bg-blue-500 hover:bg-blue-600 text-white text-xs rounded font-semibold transition-colors" onclick="openEditProductModal('${product.id}')">Editar</button>
+        <button class="px-3 py-1 bg-red-600 hover:bg-red-700 text-white text-xs rounded font-semibold transition-colors" onclick="deleteProduct('${product.id}')">Deletar</button>
       </td>
     </tr>
   `).join('');
@@ -272,23 +272,31 @@ function displayOrders(orders) {
   const tbody = document.getElementById('orders-tbody');
   
   if (orders.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="7" class="loading">Nenhum pedido encontrado</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="7" class="px-6 py-4 text-center text-gray-500">Nenhum pedido encontrado</td></tr>';
     return;
   }
 
   tbody.innerHTML = orders.map(order => {
     const date = new Date(order.created_at).toLocaleDateString('pt-BR');
+    const statusColors = {
+      'pending': 'bg-yellow-100 text-yellow-800',
+      'confirmed': 'bg-blue-100 text-blue-800',
+      'preparing': 'bg-purple-100 text-purple-800',
+      'out_for_delivery': 'bg-cyan-100 text-cyan-800',
+      'delivered': 'bg-green-100 text-green-800',
+      'cancelled': 'bg-red-100 text-red-800'
+    };
     return `
-      <tr>
-        <td>${order.id.substring(0, 8)}...</td>
-        <td>${order.customer_name}</td>
-        <td>${order.customer_phone}</td>
-        <td>R$ ${parseFloat(order.total).toFixed(2)}</td>
-        <td><span class="status-badge ${order.status}">${getStatusLabel(order.status)}</span></td>
-        <td>${date}</td>
-        <td class="actions">
-          <button class="action-btn view btn-sm" onclick="openOrderModal('${order.id}')">Ver</button>
-          <button class="action-btn update-status btn-sm" onclick="openStatusModal('${order.id}')">Atualizar</button>
+      <tr class="border-b border-gray-300 hover:bg-gray-50 text-sm">
+        <td class="px-6 py-4 font-mono text-gray-700 font-bold">${order.id.substring(0, 8)}...</td>
+        <td class="px-6 py-4 font-semibold text-gray-900">${order.customer_name}</td>
+        <td class="px-6 py-4 text-gray-700">${order.customer_phone}</td>
+        <td class="px-6 py-4 font-bold text-red-600">R$ ${parseFloat(order.total).toFixed(2)}</td>
+        <td class="px-6 py-4"><span class="px-2 py-1 rounded-full text-xs font-bold ${statusColors[order.status] || 'bg-gray-100 text-gray-800'}">${getStatusLabel(order.status)}</span></td>
+        <td class="px-6 py-4 text-gray-700">${date}</td>
+        <td class="px-6 py-4 flex gap-2">
+          <button class="px-3 py-1 bg-blue-500 hover:bg-blue-600 text-white text-xs rounded font-semibold transition-colors" onclick="openOrderModal('${order.id}')">Ver</button>
+          <button class="px-3 py-1 bg-green-600 hover:bg-green-700 text-white text-xs rounded font-semibold transition-colors" onclick="openStatusModal('${order.id}')">Atualizar</button>
         </td>
       </tr>
     `;
@@ -322,64 +330,74 @@ async function openOrderModal(orderId) {
 
     const content = document.getElementById('order-modal-content');
     const date = new Date(order.created_at).toLocaleDateString('pt-BR');
+    const statusColors = {
+      'pending': 'bg-yellow-100 text-yellow-800',
+      'confirmed': 'bg-blue-100 text-blue-800',
+      'preparing': 'bg-purple-100 text-purple-800',
+      'out_for_delivery': 'bg-cyan-100 text-cyan-800',
+      'delivered': 'bg-green-100 text-green-800',
+      'cancelled': 'bg-red-100 text-red-800'
+    };
 
     content.innerHTML = `
-      <div class="order-info">
-        <div class="order-info-item">
-          <div class="order-info-label">ID do Pedido</div>
-          <div class="order-info-value">${order.id}</div>
+      <div class="grid grid-cols-2 gap-4 mb-6 p-4 bg-gray-50 rounded-lg">
+        <div>
+          <div class="text-xs text-gray-600 font-semibold uppercase">ID do Pedido</div>
+          <div class="text-lg font-bold text-gray-900 font-mono">${order.id}</div>
         </div>
-        <div class="order-info-item">
-          <div class="order-info-label">Cliente</div>
-          <div class="order-info-value">${order.customer_name}</div>
+        <div>
+          <div class="text-xs text-gray-600 font-semibold uppercase">Cliente</div>
+          <div class="text-lg font-bold text-gray-900">${order.customer_name}</div>
         </div>
-        <div class="order-info-item">
-          <div class="order-info-label">Telefone</div>
-          <div class="order-info-value">${order.customer_phone}</div>
+        <div>
+          <div class="text-xs text-gray-600 font-semibold uppercase">Telefone</div>
+          <div class="text-lg font-bold text-gray-900">${order.customer_phone}</div>
         </div>
-        <div class="order-info-item">
-          <div class="order-info-label">Data</div>
-          <div class="order-info-value">${date}</div>
+        <div>
+          <div class="text-xs text-gray-600 font-semibold uppercase">Data</div>
+          <div class="text-lg font-bold text-gray-900">${date}</div>
         </div>
-        <div class="order-info-item">
-          <div class="order-info-label">Status</div>
-          <div class="order-info-value"><span class="status-badge ${order.status}">${getStatusLabel(order.status)}</span></div>
+        <div>
+          <div class="text-xs text-gray-600 font-semibold uppercase">Status</div>
+          <div><span class="px-2 py-1 rounded-full text-sm font-bold ${statusColors[order.status] || 'bg-gray-100 text-gray-800'}">${getStatusLabel(order.status)}</span></div>
         </div>
-        <div class="order-info-item">
-          <div class="order-info-label">Total</div>
-          <div class="order-info-value">R$ ${parseFloat(order.total).toFixed(2)}</div>
+        <div>
+          <div class="text-xs text-gray-600 font-semibold uppercase">Total</div>
+          <div class="text-lg font-bold text-red-600">R$ ${parseFloat(order.total).toFixed(2)}</div>
         </div>
       </div>
 
-      <h4>Itens do Pedido</h4>
-      <table class="order-items-table">
-        <thead>
-          <tr>
-            <th>Produto</th>
-            <th>Quantidade</th>
-            <th>Preço Unit.</th>
-            <th>Subtotal</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${items.map(item => `
-            <tr>
-              <td>${item.name}</td>
-              <td>${item.quantity}</td>
-              <td>R$ ${parseFloat(item.price).toFixed(2)}</td>
-              <td>R$ ${(item.quantity * item.price).toFixed(2)}</td>
+      <h4 class="text-lg font-bold text-gray-800 mb-3">Itens do Pedido</h4>
+      <div class="bg-white rounded-lg overflow-hidden mb-6">
+        <table class="w-full">
+          <thead class="bg-gray-100 border-b border-gray-300">
+            <tr class="text-left">
+              <th class="px-4 py-2 font-bold text-gray-800 text-sm">Produto</th>
+              <th class="px-4 py-2 font-bold text-gray-800 text-sm">Quantidade</th>
+              <th class="px-4 py-2 font-bold text-gray-800 text-sm">Preço Unit.</th>
+              <th class="px-4 py-2 font-bold text-gray-800 text-sm">Subtotal</th>
             </tr>
-          `).join('')}
-        </tbody>
-      </table>
-
-      <div>
-        <strong>Endereço de Entrega:</strong>
-        <p>${order.delivery_address}</p>
+          </thead>
+          <tbody>
+            ${items.map(item => `
+              <tr class="border-b border-gray-200 hover:bg-gray-50 text-sm">
+                <td class="px-4 py-2 font-medium text-gray-900">${item.name}</td>
+                <td class="px-4 py-2 text-center text-gray-700">${item.quantity}</td>
+                <td class="px-4 py-2 text-gray-700">R$ ${parseFloat(item.price).toFixed(2)}</td>
+                <td class="px-4 py-2 font-bold text-red-600">R$ ${(item.quantity * item.price).toFixed(2)}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
       </div>
 
-      <div class="status-selector">
-        <select id="new-status" value="${order.status}">
+      <div class="mb-6 p-4 bg-blue-50 rounded-lg border border-blue-200">
+        <strong class="text-gray-900 block mb-2">Endereço de Entrega:</strong>
+        <p class="text-gray-700">${order.delivery_address}</p>
+      </div>
+
+      <div class="flex gap-2 items-center mb-4">
+        <select id="new-status" value="${order.status}" class="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 font-semibold">
           <option value="pending">Pendente</option>
           <option value="confirmed">Confirmado</option>
           <option value="preparing">Preparando</option>
@@ -387,7 +405,7 @@ async function openOrderModal(orderId) {
           <option value="delivered">Entregue</option>
           <option value="cancelled">Cancelado</option>
         </select>
-        <button class="btn btn-primary" onclick="updateOrderStatus('${orderId}')">Atualizar Status</button>
+        <button class="px-6 py-2 bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white rounded-lg font-bold transition-all" onclick="updateOrderStatus('${orderId}')">Atualizar Status</button>
       </div>
     `;
 
@@ -444,18 +462,19 @@ function displaySalesReport(sales) {
   const reportDiv = document.getElementById('sales-report');
   
   if (sales.length === 0) {
-    reportDiv.innerHTML = '<p>Nenhuma venda nos últimos 30 dias</p>';
+    reportDiv.innerHTML = '<p class="text-center text-gray-500 py-4">Nenhuma venda nos últimos 30 dias</p>';
     return;
   }
 
   reportDiv.innerHTML = sales.map(sale => {
     const date = new Date(sale.date).toLocaleDateString('pt-BR');
     return `
-      <div class="report-item">
-        <div class="report-item-label">
-          <strong>${date}</strong>: ${sale.orders} pedidos
+      <div class="flex justify-between items-center p-3 bg-blue-50 border-l-4 border-blue-600 rounded">
+        <div>
+          <div class="font-bold text-gray-800">${date}</div>
+          <div class="text-sm text-gray-600">${sale.orders} pedidos</div>
         </div>
-        <div class="report-item-value">R$ ${parseFloat(sale.revenue).toFixed(2)}</div>
+        <div class="font-bold text-blue-600 text-lg">R$ ${parseFloat(sale.revenue).toFixed(2)}</div>
       </div>
     `;
   }).join('');
@@ -465,16 +484,17 @@ function displayTopProducts(topProducts) {
   const reportDiv = document.getElementById('top-products');
   
   if (topProducts.length === 0) {
-    reportDiv.innerHTML = '<p>Nenhum produto vendido</p>';
+    reportDiv.innerHTML = '<p class="text-center text-gray-500 py-4">Nenhum produto vendido</p>';
     return;
   }
 
   reportDiv.innerHTML = topProducts.map(product => `
-    <div class="report-item">
-      <div class="report-item-label">
-        <strong>${product.name}</strong>: ${product.total_sold} unidades vendidas
+    <div class="flex justify-between items-center p-3 bg-green-50 border-l-4 border-green-600 rounded">
+      <div>
+        <div class="font-bold text-gray-800">${product.name}</div>
+        <div class="text-sm text-gray-600">${product.times_sold} pedidos</div>
       </div>
-      <div class="report-item-value">${product.times_sold} pedidos</div>
+      <div class="font-bold text-green-600 text-lg">${product.total_sold} vendidas</div>
     </div>
   `).join('');
 }

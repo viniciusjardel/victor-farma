@@ -114,22 +114,30 @@ async function loadProducts() {
 // Exibir produtos
 function displayProducts(productsToDisplay) {
   if (productsToDisplay.length === 0) {
-    productsContainer.innerHTML = '<p class="loading">Nenhum produto encontrado</p>';
+    productsContainer.innerHTML = '<p class="col-span-full text-center text-gray-500 py-12">Nenhum produto encontrado</p>';
     return;
   }
 
   productsContainer.innerHTML = productsToDisplay.map(product => `
-    <div class="product-card">
-      <div class="product-image">
-        ${product.image_url ? `<img src="${product.image_url}" alt="${product.name}">` : 'Sem imagem'}
+    <div class="bg-white rounded-lg shadow hover:shadow-lg product-card overflow-hidden flex flex-col">
+      <div class="bg-gradient-to-br from-green-100 to-green-50 h-32 sm:h-40 flex items-center justify-center overflow-hidden">
+        ${product.image_url ? `<img src="${product.image_url}" alt="${product.name}" class="w-full h-full object-cover">` : '<span class="text-gray-400 text-sm text-center px-2">Sem imagem</span>'}
       </div>
-      <h3 class="product-name">${product.name}</h3>
-      <p class="product-description">${product.description || ''}</p>
-      <p class="product-price">R$ ${parseFloat(product.price).toFixed(2)}</p>
-      <p class="product-stock ${product.stock < 10 ? 'low' : ''}">Estoque: ${product.stock} un</p>
-      <button class="add-to-cart-btn" ${product.stock === 0 ? 'disabled' : ''} onclick="addToCart('${product.id}')">
-        ${product.stock === 0 ? 'Fora de estoque' : 'Adicionar ao carrinho'}
-      </button>
+      <div class="p-3 flex-1 flex flex-col justify-between">
+        <div>
+          <h3 class="font-bold text-sm md:text-base text-gray-900 line-clamp-2 mb-1">${product.name}</h3>
+          <p class="text-xs text-gray-600 line-clamp-2 mb-2">${product.description || ''}</p>
+        </div>
+        <div class="space-y-2">
+          <div class="flex justify-between items-center">
+            <p class="text-lg md:text-xl font-bold text-red-600">R$ ${parseFloat(product.price).toFixed(2)}</p>
+            <p class="text-xs font-semibold ${product.stock < 10 ? 'text-red-600' : 'text-gray-600'}">Est: ${product.stock}</p>
+          </div>
+          <button class="add-to-cart-btn w-full ${product.stock === 0 ? 'bg-gray-400 cursor-not-allowed' : 'bg-green-600 hover:bg-green-700 btn-hover'} text-white font-bold py-2 px-3 rounded-lg text-xs md:text-sm transition-all" ${product.stock === 0 ? 'disabled' : ''} onclick="addToCart('${product.id}')">
+            ${product.stock === 0 ? '❌ Fora de estoque' : '➕ Entrega'}
+          </button>
+        </div>
+      </div>
     </div>
   `).join('');
 }
@@ -189,7 +197,7 @@ function updateCartDisplay() {
   cartCountSpan.textContent = cart.length;
 
   if (cart.length === 0) {
-    cartItemsDiv.innerHTML = '<p class="empty-cart">Seu carrinho está vazio</p>';
+    cartItemsDiv.innerHTML = '<p class="text-center text-gray-500 py-8 text-sm">Seu carrinho está vazio</p>';
     checkoutBtn.disabled = true;
     cartTotalSpan.textContent = 'R$ 0.00';
     return;
@@ -201,16 +209,21 @@ function updateCartDisplay() {
   cartItemsDiv.innerHTML = cart.map(item => {
     total += parseFloat(item.subtotal);
     return `
-      <div class="cart-item">
-        <div class="cart-item-info">
-          <div class="cart-item-name">${item.name}</div>
-          <div class="cart-item-price">R$ ${parseFloat(item.price).toFixed(2)}</div>
+      <div class="border-b py-3 px-4 hover:bg-gray-50 text-sm">
+        <div class="flex justify-between items-start gap-2 mb-2">
+          <div class="flex-1">
+            <div class="font-semibold text-gray-900">${item.name}</div>
+            <div class="text-red-600 font-bold">R$ ${parseFloat(item.price).toFixed(2)}</div>
+          </div>
+          <button class="remove-btn bg-red-600 hover:bg-red-700 text-white px-2 py-1 rounded text-xs font-bold" onclick="removeFromCart('${item.id}')">🗑️</button>
         </div>
-        <div class="cart-item-controls">
-          <button class="quantity-btn" onclick="updateQuantity('${item.id}', ${item.quantity - 1})">-</button>
-          <span class="quantity-display">${item.quantity}</span>
-          <button class="quantity-btn" onclick="updateQuantity('${item.id}', ${item.quantity + 1})">+</button>
-          <button class="remove-btn" onclick="removeFromCart('${item.id}')">Remover</button>
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-1 bg-gray-100 rounded">
+            <button class="quantity-btn w-7 h-7 hover:bg-gray-200 text-center" onclick="updateQuantity('${item.id}', ${item.quantity - 1})">−</button>
+            <span class="w-7 text-center font-bold">${item.quantity}</span>
+            <button class="quantity-btn w-7 h-7 hover:bg-gray-200 text-center" onclick="updateQuantity('${item.id}', ${item.quantity + 1})">+</button>
+          </div>
+          <div class="text-gray-700 font-semibold">R$ ${parseFloat(item.subtotal).toFixed(2)}</div>
         </div>
       </div>
     `;
@@ -322,12 +335,8 @@ async function generatePixPayment(orderId, amount) {
     // Mostrar loading
     const loadingDiv = document.createElement('div');
     loadingDiv.id = 'pix-loading';
-    loadingDiv.style.cssText = `
-      position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
-      background: white; padding: 40px; border-radius: 10px; 
-      box-shadow: 0 4px 6px rgba(0,0,0,0.1); z-index: 1000;
-    `;
-    loadingDiv.innerHTML = '<p style="font-size: 18px;">Gerando QR Code PIX...</p>';
+    loadingDiv.className = 'fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-white p-10 rounded-lg shadow-md z-50';
+    loadingDiv.innerHTML = '<p class="text-lg font-semibold text-gray-800">Gerando QR Code PIX...</p>';
     document.body.appendChild(loadingDiv);
 
     const response = await fetch(`${API_URL}/orders/${orderId}/generate-pix`, {
@@ -381,50 +390,26 @@ function displayPixQrModal(pixData, amount, orderId) {
   // Criar overlay (escurecimento)
   const overlay = document.createElement('div');
   overlay.id = 'pix-qr-modal';
-  overlay.style.cssText = `
-    position: fixed !important;
-    top: 0 !important;
-    left: 0 !important;
-    width: 100% !important;
-    height: 100% !important;
-    background: rgba(0,0,0,0.6) !important;
-    z-index: 2147483647 !important;
-    display: flex !important;
-    align-items: center !important;
-    justify-content: center !important;
-    margin: 0 !important;
-    padding: 20px !important;
-    box-sizing: border-box !important;
-    font-family: Arial, sans-serif !important;
-  `;
+  overlay.className = 'fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center p-5 z-[2147483647]';
+  overlay.style.zIndex = '2147483647 !important';
 
   // Container do card
   const card = document.createElement('div');
-  card.style.cssText = `
-    background: white !important;
-    border-radius: 15px !important;
-    padding: 40px !important;
-    text-align: center !important;
-    max-width: 500px !important;
-    width: 100% !important;
-    box-shadow: 0 10px 30px rgba(0,0,0,0.3) !important;
-    box-sizing: border-box !important;
-    margin: 0 !important;
-  `;
+  card.className = 'bg-white rounded-2xl p-10 text-center max-w-md w-full shadow-2xl';
 
   // Conteúdo HTML
   card.innerHTML = `
-    <h2 style="margin: 0 0 20px 0 !important; color: #333 !important; font-size: 24px !important;">Escaneie o QR Code PIX</h2>
-    ${base64 ? `<img src="data:image/png;base64,${base64}" alt="QR PIX" style="max-width: 100% !important; width: 280px !important; height: 280px !important; margin: 20px auto !important; border: 2px solid #ddd !important; border-radius: 10px !important; display: block !important;">` : ''}
-    <p style="color: #666 !important; margin: 12px 0 !important; font-size: 16px !important;">Valor: <strong style="color: #e74c3c !important;">R$ ${valorNumerico.toFixed(2)}</strong></p>
+    <h2 class="text-2xl font-bold text-gray-800 mb-5">Escaneie o QR Code PIX</h2>
+    ${base64 ? `<img src="data:image/png;base64,${base64}" alt="QR PIX" class="block mx-auto w-72 h-72 my-5 border-2 border-gray-300 rounded-lg">` : ''}
+    <p class="text-gray-600 text-base my-3">Valor: <strong class="text-red-600 font-bold">R$ ${valorNumerico.toFixed(2)}</strong></p>
     ${brcode ? `
-      <label style="display: block !important; margin-top: 20px !important; font-size: 14px !important; color: #666 !important;">Código (copia & cola)</label>
-      <textarea id="pix-brcode" readonly style="width: 100% !important; min-height: 100px !important; padding: 10px !important; margin-top: 10px !important; border-radius: 6px !important; border: 1px solid #ddd !important; font-size: 12px !important; font-family: monospace !important; box-sizing: border-box !important; resize: vertical !important;">${brcode}</textarea>
-      <button id="pix-copy" style="margin-top: 12px !important; padding: 10px 20px !important; background: #3498db !important; color: white !important; border: none !important; border-radius: 5px !important; cursor: pointer !important; font-size: 14px !important; font-weight: bold !important;">📋 Copiar código</button>
+      <label class="block mt-5 text-sm text-gray-600">Código (copia & cola)</label>
+      <textarea id="pix-brcode" readonly class="w-full min-h-24 p-3 mt-2 border border-gray-300 rounded-lg text-xs font-mono resize-none focus:outline-none focus:ring-2 focus:ring-green-500">${brcode}</textarea>
+      <button id="pix-copy" class="mt-3 px-5 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg font-semibold cursor-pointer transition-colors">📋 Copiar código</button>
     ` : ''}
-    <p style="color: #999 !important; font-size: 14px !important; margin: 10px 0 !important;">Aguardando confirmação do pagamento...</p>
-    <p style="color: #27ae60 !important; font-size: 14px !important; margin-top: 20px !important;">✓ Verifique seu app de banco e confirme o pagamento</p>
-    <button id="pix-cancel" style="margin-top: 20px !important; padding: 12px 30px !important; background: #e74c3c !important; color: white !important; border: none !important; border-radius: 5px !important; cursor: pointer !important; font-size: 16px !important; font-weight: bold !important;">Cancelar</button>
+    <p class="text-gray-500 text-sm my-2">Aguardando confirmação do pagamento...</p>
+    <p class="text-green-600 text-sm mt-5 font-semibold">✓ Verifique seu app de banco e confirme o pagamento</p>
+    <button id="pix-cancel" class="mt-5 px-8 py-3 bg-red-600 hover:bg-red-700 text-white rounded-lg font-bold cursor-pointer transition-colors text-base">Cancelar</button>
   `;
 
   overlay.appendChild(card);

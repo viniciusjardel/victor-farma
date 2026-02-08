@@ -1,0 +1,27 @@
+<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background circle -->
+  <circle cx="100" cy="100" r="95" fill="white" stroke="#ddd" stroke-width="2"/>
+  
+  <!-- Pharmacy cross -->
+  <g id="cross">
+    <!-- Red vertical bar -->
+    <rect x="85" y="60" width="30" height="80" fill="#dc2626"/>
+    <!-- Green horizontal bars -->
+    <rect x="50" y="85" width="100" height="30" fill="#16a34a"/>
+  </g>
+  
+  <!-- Figures -->
+  <circle cx="65" cy="50" r="12" fill="#16a34a"/>
+  <circle cx="135" cy="50" r="12" fill="#16a34a"/>
+  <circle cx="100" cy="45" r="15" fill="#dc2626"/>
+  
+  <!-- Bodies -->
+  <path d="M 65 65 Q 60 75 65 85" stroke="#16a34a" stroke-width="8" fill="none" stroke-linecap="round"/>
+  <path d="M 135 65 Q 140 75 135 85" stroke="#16a34a" stroke-width="8" fill="none" stroke-linecap="round"/>
+  <path d="M 100 62 Q 95 72 100 82" stroke="#dc2626" stroke-width="10" fill="none" stroke-linecap="round"/>
+  
+  <!-- Text -->
+  <text x="100" y="130" font-size="18" font-weight="bold" text-anchor="middle" fill="#16a34a">VICTOR</text>
+  <text x="100" y="152" font-size="18" font-weight="bold" text-anchor="middle" fill="#dc2626">FARMA</text>
+  <text x="100" y="170" font-size="10" text-anchor="middle" fill="#333">DESDE 2014</text>
+</svg>

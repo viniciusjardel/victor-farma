@@ -80,6 +80,34 @@ module.exports = (pool) => {
         return res.status(404).json({ error: 'Pedido não encontrado' });
       }
 
+      let order = orderResult.rows[0];
+
+      // 🔄 Se tem payment_id, consultar status real da API PIX (Mercado Pago)
+      if (order.payment_id) {
+        try {
+          const PIX_API_URL = process.env.PIX_API_URL || 'https://pix-project.onrender.com';
+          const pixResponse = await axios.get(`${PIX_API_URL}/status/${order.payment_id}`);
+          
+          console.log(`📊 Status do Mercado Pago para ${order.payment_id}:`, pixResponse.data.status);
+          
+          // Se status mudou para approved, atualizar no banco
+          if (pixResponse.data.status === 'approved' && order.payment_status !== 'approved') {
+            console.log(`✅ Pagamento ${order.payment_id} confirmado! Atualizando BD...`);
+            
+            const updateResult = await pool.query(
+              'UPDATE orders SET payment_status = $1, status = $2 WHERE id = $3 RETURNING *',
+              ['approved', 'confirmed', orderId]
+            );
+            
+            order = updateResult.rows[0];
+            console.log(`✅ Pedido ${orderId} atualizado para CONFIRMED`);
+          }
+        } catch (error) {
+          console.warn(`⚠️ Erro ao consultar API PIX para ${order.payment_id}:`, error.message);
+          // Continua com o status do banco local se a API falhar
+        }
+      }
+
       const itemsResult = await pool.query(
         `SELECT oi.id, oi.product_id, p.name, oi.quantity, oi.price, (oi.quantity * oi.price) as subtotal
          FROM order_items oi
@@ -89,7 +117,7 @@ module.exports = (pool) => {
       );
 
       res.json({
-        order: orderResult.rows[0],
+        order,
         items: itemsResult.rows
       });
     } catch (error) {

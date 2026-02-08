@@ -3,6 +3,17 @@ const API_URL = window.location.hostname === 'localhost'
   ? 'http://localhost:3000/api'
   : 'https://victor-farma.onrender.com/api';
 
+// Log inicial para confirmar carregamento do script
+console.log('app.js carregado — iniciando scripts');
+
+// Capturar erros globais para que o usuário veja no console
+window.addEventListener('error', function (e) {
+  console.error('Erro capturado (window.error):', e.message, e.error);
+});
+window.addEventListener('unhandledrejection', function (e) {
+  console.error('Unhandled promise rejection:', e.reason);
+});
+
 let userId = localStorage.getItem('userId') || generateUserId();
 let cart = [];
 let products = [];
@@ -30,6 +41,15 @@ const checkoutBtn = document.getElementById('checkout-btn');
 const checkoutForm = document.getElementById('checkout-form');
 const searchInput = document.getElementById('search-input');
 const categoryFilter = document.getElementById('category-filter');
+
+// Verificar elementos críticos (ajuda a diagnosticar carregamento/caching)
+const missing = [];
+[['productsContainer', productsContainer], ['cartBtn', cartBtn], ['cartModal', cartModal], ['checkoutModal', checkoutModal], ['paymentModal', paymentModal], ['confirmationModal', confirmationModal], ['cartItemsDiv', cartItemsDiv], ['cartCountSpan', cartCountSpan], ['cartTotalSpan', cartTotalSpan], ['checkoutBtn', checkoutBtn], ['checkoutForm', checkoutForm], ['searchInput', searchInput], ['categoryFilter', categoryFilter]].forEach(([name, el]) => {
+  if (!el) missing.push(name);
+});
+if (missing.length) {
+  console.warn('Elementos DOM ausentes (verificar se app.js foi carregado antes do HTML ou se IDs mudaram):', missing);
+}
 
 // Event Listeners
 cartBtn.addEventListener('click', () => {
@@ -325,11 +345,15 @@ async function generatePixPayment(orderId, amount) {
     const pixData = await response.json();
     loadingDiv.remove();
 
-    // Exibir modal com QR code
+    console.log('generatePixPayment - resposta do backend:', pixData);
+
+    // Exibir modal com QR code (com fallback para diferentes campos retornados)
     displayPixQrModal(pixData, amount, orderId);
-    
+
     // Iniciar polling para verificar status
-    startPaymentPolling(pixData.paymentId, orderId);
+    const paymentId = pixData.paymentId || pixData.id || pixData.payment_id;
+    console.log('Iniciando polling com paymentId:', paymentId, 'orderId:', orderId);
+    startPaymentPolling(paymentId, orderId);
 
   } catch (error) {
     console.error('Erro ao gerar PIX:', error);
@@ -339,53 +363,143 @@ async function generatePixPayment(orderId, amount) {
   }
 }
 
-// Exibir modal com QR Code PIX
+// Exibir modal com QR Code PIX em iframe isolado
 function displayPixQrModal(pixData, amount, orderId) {
-  // Converter amount para número se for string
   const valorNumerico = parseFloat(amount);
   
-  // Criar modal
-  const modal = document.createElement('div');
-  modal.id = 'pix-qr-modal';
-  modal.style.cssText = `
+  // Remover modal/iframe anterior se existir
+  const existingIframe = document.getElementById('pix-qr-iframe');
+  if (existingIframe) existingIframe.remove();
+
+  // Determinar fonte do QR: base64, URL ou código BRcode (copia & cola)
+  const base64 = pixData.qrCodeBase64 || pixData.qr_code_base64 || null;
+  const qrUrl = pixData.qrCodeUrl || pixData.qr_code_url || null;
+  const brcode = pixData.qrCode || pixData.qr_code || pixData.qr || null;
+
+  console.log('displayPixQrModal - fontes detectadas:', { base64, qrUrl, brcode });
+
+  // Criar iframe para isolar do CSS da página
+  const iframe = document.createElement('iframe');
+  iframe.id = 'pix-qr-iframe';
+  iframe.style.cssText = `
     position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-    background: rgba(0,0,0,0.5); display: flex; align-items: center; 
-    justify-content: center; z-index: 999;
+    border: none; z-index: 2147483647; background: rgba(0,0,0,0.6);
   `;
-  
-  modal.innerHTML = `
-    <div style="
-      background: white; border-radius: 15px; padding: 40px;
-      text-align: center; max-width: 500px; box-shadow: 0 10px 30px rgba(0,0,0,0.3);
-    ">
-      <h2 style="margin-bottom: 20px; color: #333;">Escaneie o QR Code PIX</h2>
-      
-      <img id="qr-code-pix-img" src="data:image/png;base64,${pixData.qrCodeBase64}" 
-        style="width: 280px; height: 280px; margin: 20px auto; border: 2px solid #ddd; border-radius: 10px;">
-      
-      <p style="color: #666; margin: 20px 0; font-size: 16px;">
-        Valor: <strong>R$ ${valorNumerico.toFixed(2)}</strong>
-      </p>
-      
-      <p style="color: #999; font-size: 14px; margin: 10px 0;">
-        Aguardando confirmação do pagamento...
-      </p>
-      
-      <p style="color: #27ae60; font-size: 14px; margin-top: 20px;">
-        ✓ Verifique seu app de banco e confirme o pagamento
-      </p>
-      
-      <button onclick="cancelPixPayment('${orderId}')" style="
-        margin-top: 30px; padding: 12px 30px; background: #e74c3c; color: white;
-        border: none; border-radius: 5px; cursor: pointer; font-size: 16px;
-      ">
-        Cancelar
-      </button>
-    </div>
+
+  // HTML do modal dentro do iframe
+  const iframeHTML = `
+    <!doctype html>
+    <html lang="pt-BR">
+    <head>
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1">
+      <title>PIX - Victor Farma</title>
+      <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+          font-family: Arial, sans-serif;
+          background: rgba(0,0,0,0.6);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          min-height: 100vh;
+          padding: 20px;
+        }
+        .modal-content {
+          background: white;
+          border-radius: 15px;
+          padding: 40px;
+          text-align: center;
+          max-width: 500px;
+          box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+        }
+        h2 { margin-bottom: 20px; color: #333; }
+        img { max-width: 100%; width: 280px; height: 280px; margin: 20px auto; border: 2px solid #ddd; border-radius: 10px; display: block; }
+        p { color: #666; margin: 12px 0; font-size: 16px; }
+        .valor { color: #e74c3c; font-weight: bold; }
+        .info-text { color: #999; font-size: 14px; margin: 10px 0; }
+        .success-text { color: #27ae60; font-size: 14px; margin-top: 20px; }
+        textarea {
+          width: 100%;
+          min-height: 100px;
+          padding: 10px;
+          margin-top: 10px;
+          border-radius: 6px;
+          border: 1px solid #ddd;
+          font-size: 12px;
+          font-family: monospace;
+          resize: vertical;
+        }
+        button {
+          margin-top: 12px;
+          padding: 10px 20px;
+          border: none;
+          border-radius: 5px;
+          cursor: pointer;
+          font-size: 14px;
+          font-weight: bold;
+          color: white;
+        }
+        #copy-btn { background: #3498db; }
+        #copy-btn:hover { background: #2980b9; }
+        #cancel-btn { background: #e74c3c; margin-top: 20px; }
+        #cancel-btn:hover { background: #c0392b; }
+        .label { margin-top: 20px; font-size: 14px; color: #666; display: block; }
+      </style>
+    </head>
+    <body>
+      <div class="modal-content">
+        <h2>Escaneie o QR Code PIX</h2>
+        ${ base64 ? `<img src="data:image/png;base64,${base64}" alt="QR PIX">` : (qrUrl ? `<img src="${qrUrl}" alt="QR PIX">` : '') }
+        <p><span class="valor">R$ ${valorNumerico.toFixed(2)}</span></p>
+        ${ brcode ? `
+          <label class="label">Código (copia & cola)</label>
+          <textarea id="brcode-text" readonly>${brcode}</textarea>
+          <button id="copy-btn">📋 Copiar código</button>
+        ` : '' }
+        <p class="info-text">Aguardando confirmação do pagamento...</p>
+        <p class="success-text">✓ Verifique seu app de banco e confirme o pagamento</p>
+        <button id="cancel-btn">Cancelar</button>
+      </div>
+      <script>
+        document.getElementById('copy-btn')?.addEventListener('click', function() {
+          const ta = document.getElementById('brcode-text');
+          if (ta) {
+            ta.select();
+            document.execCommand('copy');
+            this.textContent = '✓ Copiado!';
+            setTimeout(() => { this.textContent = '📋 Copiar código'; }, 2000);
+          }
+        });
+        document.getElementById('cancel-btn').addEventListener('click', function() {
+          window.parent.cancelPixPayment('${orderId}');
+        });
+      </script>
+    </body>
+    </html>
   `;
+
+  document.body.appendChild(iframe);
   
-  document.body.appendChild(modal);
+  // Escrever conteúdo no iframe
+  iframe.onload = () => {
+    try {
+      iframe.contentDocument.open();
+      iframe.contentDocument.write(iframeHTML);
+      iframe.contentDocument.close();
+      console.log('Pix modal em iframe carregado com sucesso (#pix-qr-iframe)');
+    } catch (e) {
+      console.error('Erro ao escrever em iframe:', e);
+      // Fallback: escrever como string antes de adicionar ao DOM
+      iframe.srcdoc = iframeHTML;
+    }
+  };
+
+  // Fallback para navegadores que não permitem document.write
+  iframe.srcdoc = iframeHTML;
+  
   paymentModal.classList.add('hidden');
+  document.body.style.overflow = 'hidden';
 }
 
 // Fazer polling para verificar status do pagamento
@@ -424,8 +538,9 @@ function startPaymentPolling(paymentId, orderId) {
 
 // PIX confirmado com sucesso
 function completePixPayment(order) {
-  const modal = document.getElementById('pix-qr-modal');
-  if (modal) modal.remove();
+  const iframe = document.getElementById('pix-qr-iframe');
+  if (iframe) iframe.remove();
+  document.body.style.overflow = 'auto';
 
   currentOrder = order;
   showConfirmation(order);
@@ -434,16 +549,18 @@ function completePixPayment(order) {
 // Cancelar pagamento PIX
 function cancelPixPayment(orderId) {
   clearInterval(paymentPollingInterval);
-  const modal = document.getElementById('pix-qr-modal');
-  if (modal) modal.remove();
+  const iframe = document.getElementById('pix-qr-iframe');
+  if (iframe) iframe.remove();
+  document.body.style.overflow = 'auto';
   paymentModal.classList.add('hidden');
   alert('Pagamento cancelado');
 }
 
 // Timeout do pagamento
 function pixPaymentTimeout(orderId) {
-  const modal = document.getElementById('pix-qr-modal');
-  if (modal) modal.remove();
+  const iframe = document.getElementById('pix-qr-iframe');
+  if (iframe) iframe.remove();
+  document.body.style.overflow = 'auto';
   alert('Tempo de pagamento expirado. Tente novamente.');
 }
 

@@ -119,9 +119,9 @@ function displayProducts(productsToDisplay) {
   }
 
   productsContainer.innerHTML = productsToDisplay.map(product => `
-    <div class="bg-white rounded-lg shadow hover:shadow-lg product-card overflow-hidden flex flex-col">
+    <div class="bg-white rounded-lg shadow hover:shadow-lg product-card overflow-hidden flex flex-col" data-product-id="${product.id}">
       <div class="bg-gradient-to-br from-green-100 to-green-50 h-32 sm:h-40 flex items-center justify-center overflow-hidden">
-        ${product.image_url ? `<img src="${product.image_url}" alt="${product.name}" class="w-full h-full object-cover">` : '<span class="text-gray-400 text-sm text-center px-2">Sem imagem</span>'}
+        ${product.image_url ? `<img id="product-img-${product.id}" src="${product.image_url}" alt="${product.name}" class="w-full h-full object-cover product-image-el">` : '<span class="text-gray-400 text-sm text-center px-2">Sem imagem</span>'}
       </div>
       <div class="p-3 flex-1 flex flex-col justify-between">
         <div>
@@ -134,7 +134,7 @@ function displayProducts(productsToDisplay) {
             <p class="text-xs font-semibold ${product.stock < 10 ? 'text-red-600' : 'text-gray-600'}">Est: ${product.stock}</p>
           </div>
           <button class="add-to-cart-btn w-full ${product.stock === 0 ? 'bg-gray-400 cursor-not-allowed' : 'bg-green-600 hover:bg-green-700 btn-hover'} text-white font-bold py-2 px-3 rounded-lg text-xs md:text-sm transition-all" ${product.stock === 0 ? 'disabled' : ''} onclick="addToCart('${product.id}')">
-            ${product.stock === 0 ? '❌ Fora de estoque' : '➕ Entrega'}
+            ${product.stock === 0 ? '❌ Fora de estoque' : '➕ Adicionar'}
           </button>
         </div>
       </div>
@@ -159,7 +159,45 @@ function filterProducts() {
 
 // Adicionar ao carrinho
 async function addToCart(productId) {
+  // Animação: clonar imagem do produto e mover para o botão do carrinho
   try {
+    const img = document.getElementById(`product-img-${productId}`);
+    if (img) {
+      const imgRect = img.getBoundingClientRect();
+      const cartRect = cartBtn.getBoundingClientRect();
+
+      const clone = img.cloneNode(true);
+      clone.style.position = 'fixed';
+      clone.style.left = `${imgRect.left}px`;
+      clone.style.top = `${imgRect.top}px`;
+      clone.style.width = `${imgRect.width}px`;
+      clone.style.height = `${imgRect.height}px`;
+      clone.style.transition = 'transform 620ms cubic-bezier(.2,.8,.2,1), opacity 300ms';
+      clone.style.zIndex = 2147483647;
+      clone.style.pointerEvents = 'none';
+      document.body.appendChild(clone);
+
+      const dx = (cartRect.left + cartRect.width / 2) - (imgRect.left + imgRect.width / 2);
+      const dy = (cartRect.top + cartRect.height / 2) - (imgRect.top + imgRect.height / 2);
+      const scale = 0.18;
+
+      requestAnimationFrame(() => {
+        clone.style.transform = `translate3d(${dx}px, ${dy}px, 0) scale(${scale})`;
+        clone.style.opacity = '0.9';
+      });
+
+      await new Promise(resolve => {
+        clone.addEventListener('transitionend', function onend(e) {
+          if (e.propertyName.includes('transform')) {
+            clone.removeEventListener('transitionend', onend);
+            clone.remove();
+            resolve();
+          }
+        });
+      });
+    }
+
+    // Após animação, chamar API para adicionar ao carrinho
     const response = await fetch(`${API_URL}/cart/${userId}/add`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -172,10 +210,15 @@ async function addToCart(productId) {
       return;
     }
 
-    alert('Produto adicionado ao carrinho!');
-    loadCart();
+    // Atualizar carrinho
+    await loadCart();
+
+    // Animar mensagem saindo de dentro do carrinho para o centro da tela
+    const product = products.find(p => p.id === productId) || { name: 'Produto' };
+    animateCartMessage(`${product.name} foi adicionado ao carrinho`);
+
   } catch (error) {
-    console.error('Erro:', error);
+    console.error('Erro ao adicionar ao carrinho:', error);
     alert('Erro ao adicionar ao carrinho');
   }
 }
@@ -230,6 +273,43 @@ function updateCartDisplay() {
   }).join('');
 
   cartTotalSpan.textContent = `R$ ${total.toFixed(2)}`;
+}
+
+// Animar mensagem do carrinho para o centro da tela
+function animateCartMessage(text) {
+  // Criar elemento de mensagem posicionado no centro do botão do carrinho
+  const cartRect = cartBtn.getBoundingClientRect();
+  const msg = document.createElement('div');
+  msg.className = 'floating-cart-message';
+  msg.textContent = text;
+  msg.style.position = 'fixed';
+  msg.style.left = `${cartRect.left + cartRect.width/2}px`;
+  msg.style.top = `${cartRect.top + cartRect.height/2}px`;
+  msg.style.transform = 'translate(-50%, -50%) scale(0.9)';
+  msg.style.zIndex = 2150000000;
+  msg.style.pointerEvents = 'none';
+  msg.style.opacity = '0';
+  document.body.appendChild(msg);
+
+  // Forçar reflow
+  void msg.offsetWidth;
+
+  // Animar para centro da tela
+  const centerX = window.innerWidth / 2;
+  const centerY = window.innerHeight / 2;
+  const dx = centerX - (cartRect.left + cartRect.width/2);
+  const dy = centerY - (cartRect.top + cartRect.height/2);
+
+  msg.style.transition = 'transform 700ms cubic-bezier(.2,.8,.2,1), opacity 350ms';
+  msg.style.opacity = '1';
+  msg.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px)) scale(1)`;
+
+  // Depois de animar, manter 1.2s e sumir
+  setTimeout(() => {
+    msg.style.transition = 'opacity 400ms';
+    msg.style.opacity = '0';
+    setTimeout(() => msg.remove(), 500);
+  }, 1400);
 }
 
 // Atualizar quantidade
@@ -387,68 +467,107 @@ function displayPixQrModal(pixData, amount, orderId) {
 
   console.log('displayPixQrModal - fontes detectadas:', { base64, qrUrl, brcode });
 
-  // Criar overlay (escurecimento) com inline styles para máxima compatibilidade
+  // Criar overlay (escurecimento) — SEM classes, apenas inline styles com !important via cssText
   const overlay = document.createElement('div');
-  overlay.id = 'pix-qr-modal';
+  overlay.id = 'pix-qr-modal-' + Date.now();
+  
+  // Aplicar estilos via cssText (ÚNICO jeito de !important funcionar em JS)
   overlay.style.cssText = `
     position: fixed !important;
     top: 0 !important;
     left: 0 !important;
-    right: 0 !important;
-    bottom: 0 !important;
     width: 100% !important;
     height: 100% !important;
-    background: rgba(0, 0, 0, 0.6) !important;
     display: flex !important;
     align-items: center !important;
     justify-content: center !important;
-    z-index: 2147483647 !important;
+    z-index: 9999999999 !important;
+    background-color: rgba(0, 0, 0, 0.7) !important;
     padding: 20px !important;
     box-sizing: border-box !important;
     margin: 0 !important;
+    border: none !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    pointer-events: auto !important;
+    overflow: auto !important;
   `;
 
-  // Container do card
+  // Container do card — SEM classes, apenas inline styles com !important via cssText
   const card = document.createElement('div');
   card.style.cssText = `
+    position: relative !important;
     background: white !important;
     border-radius: 12px !important;
     padding: 40px !important;
     text-align: center !important;
     max-width: 500px !important;
-    width: 100% !important;
-    box-shadow: 0 20px 25px rgba(0, 0, 0, 0.15) !important;
+    width: 90vw !important;
+    max-height: 85vh !important;
+    overflow-y: auto !important;
+    box-shadow: 0 20px 25px rgba(0, 0, 0, 0.2) !important;
     box-sizing: border-box !important;
     margin: 0 auto !important;
+    z-index: 10000000000 !important;
+    pointer-events: auto !important;
   `;
+  
+  // Responsividade para telas muito pequenas
+  if (window.innerWidth < 480) {
+    const currentPadding = card.style.padding;
+    card.style.cssText = card.style.cssText.replace('padding: 40px !important;', 'padding: 20px !important;');
+  }
 
-  // Conteúdo HTML
+  // Conteúdo HTML (suporta base64 ou URL) — QR responsivo + código copia e cola juntos
+  const qrSize = window.innerWidth < 480 ? '200px' : '280px';
+  const titleSize = window.innerWidth < 480 ? '18px' : '24px';
+  
   card.innerHTML = `
-    <div style="font-size: 24px; font-weight: bold; color: #333; margin-bottom: 20px;">Escaneie o QR Code PIX</div>
-    ${base64 ? `<img src="data:image/png;base64,${base64}" alt="QR PIX" style="display: block; margin: 20px auto; width: 280px; height: 280px; border: 2px solid #ddd; border-radius: 8px;">` : ''}
-    <div style="color: #666; font-size: 16px; margin: 15px 0;">Valor: <strong style="color: #dc2626; font-weight: bold;">R$ ${valorNumerico.toFixed(2)}</strong></div>
+    <div style="font-size: ${titleSize} !important; font-weight: bold !important; color: #333 !important; margin-bottom: 30px !important;">Escaneie o QR Code PIX</div>
+    
+    <div style="margin-bottom: 30px !important;">
+      ${base64 ? `<img src="data:image/png;base64,${base64}" alt="QR PIX" style="display: block !important; margin: 0 auto !important; width: ${qrSize} !important; height: ${qrSize} !important; border: 3px solid #10b981 !important; border-radius: 12px !important; background: white !important;">` : (qrUrl ? `<img src="${qrUrl}" alt="QR PIX" style="display: block !important; margin: 0 auto !important; width: ${qrSize} !important; height: ${qrSize} !important; border: 3px solid #10b981 !important; border-radius: 12px !important;">` : '<div style="text-align: center; color: #999;">QR Code não disponível</div>')}
+    </div>
+    
+    <div style="background: #f0f9ff !important; padding: 15px !important; border-radius: 8px !important; margin-bottom: 20px !important; border-left: 4px solid #3b82f6 !important;">
+      <div style="color: #666 !important; font-size: 14px !important; margin-bottom: 10px !important; font-weight: 500 !important;">Valor:</div>
+      <div style="color: #dc2626 !important; font-size: 20px !important; font-weight: bold !important;">R$ ${valorNumerico.toFixed(2)}</div>
+    </div>
+    
     ${brcode ? `
-      <div style="margin-top: 20px; text-align: left;">
-        <label style="display: block; font-size: 14px; color: #666; margin-bottom: 8px; font-weight: 500;">Código (copia & cola)</label>
-        <textarea id="pix-brcode" readonly style="width: 100%; min-height: 100px; padding: 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 12px; font-family: monospace; resize: vertical; box-sizing: border-box;">${brcode}</textarea>
-        <button id="pix-copy" style="margin-top: 12px; padding: 10px 20px; background: #3b82f6; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: 600; transition: background 0.2s;" onmouseover="this.style.background='#2563eb'" onmouseout="this.style.background='#3b82f6'">📋 Copiar código</button>
+      <div style="margin-bottom: 20px !important;">
+        <div style="text-align: left !important; margin-bottom: 10px !important;">
+          <label style="display: block !important; font-size: 13px !important; color: #666 !important; font-weight: 600 !important; text-transform: uppercase !important;">Chave PIX (Copia & Cola):</label>
+        </div>
+        <textarea id="pix-brcode" readonly style="width: 100% !important; min-height: 70px !important; padding: 12px !important; border: 1px solid #e5e7eb !important; border-radius: 8px !important; font-size: 12px !important; font-family: 'Courier New', monospace !important; resize: none !important; box-sizing: border-box !important; background: #fafafa !important; color: #333 !important;">${brcode}</textarea>
+        <button id="pix-copy" style="width: 100% !important; margin-top: 10px !important; padding: 12px !important; background: #3b82f6 !important; color: white !important; border: none !important; border-radius: 8px !important; cursor: pointer !important; font-size: 14px !important; font-weight: 600 !important; transition: background 0.2s !important; hover: background: #2563eb !important;" onmouseover="this.style.background='#2563eb'" onmouseout="this.style.background='#3b82f6'">📋 Copiar Chave PIX</button>
       </div>
     ` : ''}
-    <div id="pix-status-msg" style="color: #999; font-size: 14px; margin: 12px 0;">Aguardando confirmação do pagamento...</div>
-    <div style="display:flex; gap:8px; justify-content:center; align-items:center; margin-top: 12px;">
-      <button id="pix-check" style="padding: 10px 18px; background: #10b981; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: 600;">🔄 Verificar status</button>
-      <button id="pix-cancel" style="padding: 10px 18px; background: #dc2626; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: 600;">Cancelar</button>
+    
+    <div id="pix-status-msg" style="color: #10b981 !important; font-size: 13px !important; margin: 20px 0 !important; font-weight: 500 !important;">⏳ Aguardando confirmação do pagamento...</div>
+    
+    <div style="display: flex !important; gap: 10px !important; justify-content: center !important; margin-top: 20px !important;">
+      <button id="pix-cancel" style="padding: 12px 24px !important; background: #dc2626 !important; color: white !important; border: none !important; border-radius: 8px !important; cursor: pointer !important; font-size: 14px !important; font-weight: 600 !important; transition: background 0.2s !important; width: 100% !important;" onmouseover="this.style.background='#b91c1c'" onmouseout="this.style.background='#dc2626'">❌ Cancelar</button>
     </div>
   `;
 
   overlay.appendChild(card);
   // guardar orderId no overlay para verificações externas (visibilitychange)
   overlay.setAttribute('data-order-id', orderId);
+  
+  // APPEND AO BODY AGORA (COM ESTILOS JÁ APLICADOS)
   document.body.appendChild(overlay);
-  document.body.style.overflow = 'hidden';
 
-  console.log('Modal QR criado. overlay rect:', overlay.getBoundingClientRect());
-  console.log('Modal elemento visível:', overlay.offsetParent !== null);
+  // Forçar reflow para garantir renderização
+  void overlay.offsetHeight;
+  void overlay.offsetWidth;
+  
+  console.log('✅ Overlay PIX criado:', overlay.id);
+  console.log('✅ Overlay visível:', overlay.offsetParent !== null);
+  console.log('✅ Overlay display:', window.getComputedStyle(overlay).display);
+  console.log('✅ Overlay z-index:', window.getComputedStyle(overlay).zIndex);
+
+  document.body.style.overflow = 'hidden';
 
   // Ligar botões
   const copyBtn = document.getElementById('pix-copy');
@@ -458,7 +577,7 @@ function displayPixQrModal(pixData, amount, orderId) {
       ta.select();
       document.execCommand('copy');
       this.textContent = '✓ Copiado!';
-      setTimeout(() => { this.textContent = '📋 Copiar código'; }, 2000);
+      setTimeout(() => { this.textContent = '📋 Copiar Chave PIX'; }, 2000);
     });
   }
 
@@ -469,13 +588,11 @@ function displayPixQrModal(pixData, amount, orderId) {
     });
   }
 
-  const checkBtn = document.getElementById('pix-check');
-  if (checkBtn) {
-    checkBtn.addEventListener('click', async () => {
-      const statusEl = document.getElementById('pix-status-msg');
-      if (statusEl) statusEl.textContent = 'Verificando...';
-      await checkOrderStatus(orderId);
-    });
+  // Checagem imediata para capturar status já atualizado pelo webhook
+  try {
+    checkOrderStatus(orderId);
+  } catch (e) {
+    console.warn('Erro ao disparar checkOrderStatus imediato:', e);
   }
 
   paymentModal.classList.add('hidden');
@@ -485,10 +602,9 @@ function displayPixQrModal(pixData, amount, orderId) {
 function startPaymentPolling(paymentId, orderId) {
   let attempts = 0;
   const maxAttempts = 120; // 10 minutos (cda 5 segundos)
-
-  paymentPollingInterval = setInterval(async () => {
+  // Executar uma verificação imediata e depois o polling periódico
+  async function doCheck() {
     attempts++;
-
     try {
       const response = await fetch(`${API_URL}/orders/${orderId}`);
       if (!response.ok) return;
@@ -500,9 +616,8 @@ function startPaymentPolling(paymentId, orderId) {
       if (order.status === 'confirmed' && order.payment_status === 'approved') {
         clearInterval(paymentPollingInterval);
         completePixPayment(order);
-        return;
+        return true;
       }
-
     } catch (error) {
       console.error('Erro ao verificar pagamento:', error);
     }
@@ -512,6 +627,14 @@ function startPaymentPolling(paymentId, orderId) {
       clearInterval(paymentPollingInterval);
       pixPaymentTimeout(orderId);
     }
+    return false;
+  }
+
+  // checagem imediata
+  doCheck();
+
+  paymentPollingInterval = setInterval(() => {
+    doCheck();
   }, 5000); // Verificar a cada 5 segundos
 }
 
@@ -541,7 +664,7 @@ async function checkOrderStatus(orderId) {
 // Rechecar automaticamente quando o usuário retornar à aba (caso o webhook tenha sido entregue enquanto a aba estava em segundo plano)
 document.addEventListener('visibilitychange', () => {
   if (!document.hidden) {
-    const modal = document.getElementById('pix-qr-modal');
+    const modal = document.querySelector('[id^="pix-qr-modal-"]');
     if (modal) {
       const oid = modal.getAttribute('data-order-id');
       if (oid) checkOrderStatus(oid);
@@ -551,7 +674,7 @@ document.addEventListener('visibilitychange', () => {
 
 // PIX confirmado com sucesso
 function completePixPayment(order) {
-  const modal = document.getElementById('pix-qr-modal');
+  const modal = document.querySelector('[id^="pix-qr-modal-"]');
   if (modal) modal.remove();
   document.body.style.overflow = 'auto';
 
@@ -562,7 +685,7 @@ function completePixPayment(order) {
 // Cancelar pagamento PIX
 function cancelPixPayment(orderId) {
   clearInterval(paymentPollingInterval);
-  const modal = document.getElementById('pix-qr-modal');
+  const modal = document.querySelector('[id^="pix-qr-modal-"]');
   if (modal) modal.remove();
   document.body.style.overflow = 'auto';
   paymentModal.classList.add('hidden');
@@ -571,7 +694,7 @@ function cancelPixPayment(orderId) {
 
 // Timeout do pagamento
 function pixPaymentTimeout(orderId) {
-  const modal = document.getElementById('pix-qr-modal');
+  const modal = document.querySelector('[id^="pix-qr-modal-"]');
   if (modal) modal.remove();
   document.body.style.overflow = 'auto';
   alert('Tempo de pagamento expirado. Tente novamente.');

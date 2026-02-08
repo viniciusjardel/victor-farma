@@ -19,7 +19,8 @@ const orderStatusFilter = document.getElementById('order-status-filter');
 // Event Listeners
 navBtns.forEach(btn => {
   btn.addEventListener('click', (e) => {
-    const sectionName = e.target.dataset.section;
+    const sectionName = e.currentTarget ? e.currentTarget.dataset.section : btn.dataset.section;
+    if (!sectionName) return;
     switchSection(sectionName);
   });
 });
@@ -63,11 +64,36 @@ function switchSection(sectionName) {
     }
   });
 
-  // Mostrar seção
+  // Mostrar seção com transição: usar style.display + classes active/inactive
   sections.forEach(section => {
-    section.classList.remove('active');
+    const el = section;
+    // esconder imediatamente
+    el.style.display = 'none';
+    el.classList.remove('active');
+    el.classList.add('inactive');
+    // garantir que a classe hidden do Tailwind esteja aplicada
+    if (!el.classList.contains('hidden')) el.classList.add('hidden');
   });
-  document.getElementById(`${sectionName}-section`).classList.add('active');
+
+  const target = document.getElementById(`${sectionName}-section`);
+  if (target) {
+    // remover a classe hidden do Tailwind para permitir exibição
+    if (target.classList.contains('hidden')) target.classList.remove('hidden');
+    // preparar para animação
+    target.style.display = '';
+    // forçar reflow antes de trocar classes para disparar a transição
+    void target.offsetWidth;
+    target.classList.remove('inactive');
+    target.classList.add('active');
+  }
+
+  // Atualizar estilo visual dos botões (bg e texto)
+  navBtns.forEach(btn => {
+    btn.classList.remove('bg-green-500', 'text-white');
+    if (btn.dataset.section === sectionName) {
+      btn.classList.add('bg-green-500', 'text-white');
+    }
+  });
 
   // Carregar dados
   switch (sectionName) {

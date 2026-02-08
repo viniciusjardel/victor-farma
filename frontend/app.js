@@ -387,29 +387,56 @@ function displayPixQrModal(pixData, amount, orderId) {
 
   console.log('displayPixQrModal - fontes detectadas:', { base64, qrUrl, brcode });
 
-  // Criar overlay (escurecimento)
+  // Criar overlay (escurecimento) com inline styles para máxima compatibilidade
   const overlay = document.createElement('div');
   overlay.id = 'pix-qr-modal';
-  overlay.className = 'fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center p-5 z-[2147483647]';
-  overlay.style.zIndex = '2147483647 !important';
+  overlay.style.cssText = `
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    width: 100% !important;
+    height: 100% !important;
+    background: rgba(0, 0, 0, 0.6) !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    z-index: 2147483647 !important;
+    padding: 20px !important;
+    box-sizing: border-box !important;
+    margin: 0 !important;
+  `;
 
   // Container do card
   const card = document.createElement('div');
-  card.className = 'bg-white rounded-2xl p-10 text-center max-w-md w-full shadow-2xl';
+  card.style.cssText = `
+    background: white !important;
+    border-radius: 12px !important;
+    padding: 40px !important;
+    text-align: center !important;
+    max-width: 500px !important;
+    width: 100% !important;
+    box-shadow: 0 20px 25px rgba(0, 0, 0, 0.15) !important;
+    box-sizing: border-box !important;
+    margin: 0 auto !important;
+  `;
 
   // Conteúdo HTML
   card.innerHTML = `
-    <h2 class="text-2xl font-bold text-gray-800 mb-5">Escaneie o QR Code PIX</h2>
-    ${base64 ? `<img src="data:image/png;base64,${base64}" alt="QR PIX" class="block mx-auto w-72 h-72 my-5 border-2 border-gray-300 rounded-lg">` : ''}
-    <p class="text-gray-600 text-base my-3">Valor: <strong class="text-red-600 font-bold">R$ ${valorNumerico.toFixed(2)}</strong></p>
+    <div style="font-size: 24px; font-weight: bold; color: #333; margin-bottom: 20px;">Escaneie o QR Code PIX</div>
+    ${base64 ? `<img src="data:image/png;base64,${base64}" alt="QR PIX" style="display: block; margin: 20px auto; width: 280px; height: 280px; border: 2px solid #ddd; border-radius: 8px;">` : ''}
+    <div style="color: #666; font-size: 16px; margin: 15px 0;">Valor: <strong style="color: #dc2626; font-weight: bold;">R$ ${valorNumerico.toFixed(2)}</strong></div>
     ${brcode ? `
-      <label class="block mt-5 text-sm text-gray-600">Código (copia & cola)</label>
-      <textarea id="pix-brcode" readonly class="w-full min-h-24 p-3 mt-2 border border-gray-300 rounded-lg text-xs font-mono resize-none focus:outline-none focus:ring-2 focus:ring-green-500">${brcode}</textarea>
-      <button id="pix-copy" class="mt-3 px-5 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg font-semibold cursor-pointer transition-colors">📋 Copiar código</button>
+      <div style="margin-top: 20px; text-align: left;">
+        <label style="display: block; font-size: 14px; color: #666; margin-bottom: 8px; font-weight: 500;">Código (copia & cola)</label>
+        <textarea id="pix-brcode" readonly style="width: 100%; min-height: 100px; padding: 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 12px; font-family: monospace; resize: vertical; box-sizing: border-box;">${brcode}</textarea>
+        <button id="pix-copy" style="margin-top: 12px; padding: 10px 20px; background: #3b82f6; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: 600; transition: background 0.2s;" onmouseover="this.style.background='#2563eb'" onmouseout="this.style.background='#3b82f6'">📋 Copiar código</button>
+      </div>
     ` : ''}
-    <p class="text-gray-500 text-sm my-2">Aguardando confirmação do pagamento...</p>
-    <p class="text-green-600 text-sm mt-5 font-semibold">✓ Verifique seu app de banco e confirme o pagamento</p>
-    <button id="pix-cancel" class="mt-5 px-8 py-3 bg-red-600 hover:bg-red-700 text-white rounded-lg font-bold cursor-pointer transition-colors text-base">Cancelar</button>
+    <div style="color: #999; font-size: 14px; margin: 12px 0;">Aguardando confirmação do pagamento...</div>
+    <div style="color: #16a34a; font-size: 14px; margin-top: 20px; font-weight: 600;">✓ Verifique seu app de banco e confirme o pagamento</div>
+    <button id="pix-cancel" style="margin-top: 20px; padding: 12px 30px; background: #dc2626; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 16px; font-weight: bold; transition: background 0.2s;" onmouseover="this.style.background='#b91c1c'" onmouseout="this.style.background='#dc2626'">Cancelar</button>
   `;
 
   overlay.appendChild(card);
@@ -417,6 +444,7 @@ function displayPixQrModal(pixData, amount, orderId) {
   document.body.style.overflow = 'hidden';
 
   console.log('Modal QR criado. overlay rect:', overlay.getBoundingClientRect());
+  console.log('Modal elemento visível:', overlay.offsetParent !== null);
 
   // Ligar botões
   const copyBtn = document.getElementById('pix-copy');

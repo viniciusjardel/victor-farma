@@ -378,21 +378,20 @@ function displayPixQrModal(pixData, amount, orderId) {
 
   console.log('displayPixQrModal - fontes detectadas:', { base64, qrUrl, brcode });
 
+  // Bloquear scroll imediatamente
+  document.body.style.overflow = 'hidden';
+  
   // Criar iframe para isolar do CSS da página
   const iframe = document.createElement('iframe');
   iframe.id = 'pix-qr-iframe';
-  iframe.style.cssText = `
-    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-    border: none; z-index: 2147483647; background: rgba(0,0,0,0.6);
-  `;
-
+  iframe.setAttribute('sandbox', 'allow-same-origin');
+  
   // HTML do modal dentro do iframe
   const iframeHTML = `
     <!doctype html>
     <html lang="pt-BR">
     <head>
       <meta charset="utf-8">
-      <meta name="viewport" content="width=device-width, initial-scale=1">
       <title>PIX - Victor Farma</title>
       <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -402,6 +401,8 @@ function displayPixQrModal(pixData, amount, orderId) {
           display: flex;
           align-items: center;
           justify-content: center;
+          width: 100vw !important;
+          height: 100vh !important;
           min-height: 100vh;
           padding: 20px;
         }
@@ -471,78 +472,88 @@ function displayPixQrModal(pixData, amount, orderId) {
             setTimeout(() => { this.textContent = '📋 Copiar código'; }, 2000);
           }
         });
-        document.getElementById('cancel-btn').addEventListener('click', function() {
+        document.getElementById('cancel-btn')?.addEventListener('click', function() {
           window.parent.cancelPixPayment('${orderId}');
         });
+        console.log('iframe content carregado com sucesso');
       </script>
     </body>
     </html>
   `;
 
-  document.body.appendChild(iframe);
-  
-  // Forçar estilos do iframe com !important
+  // Aplicar estilos de preenchimento antes de adicionar ao DOM
+  iframe.style.setProperty('position', 'fixed', 'important');
+  iframe.style.setProperty('top', '0', 'important');
+  iframe.style.setProperty('left', '0', 'important');
+  iframe.style.setProperty('width', '100%', 'important');
+  iframe.style.setProperty('height', '100%', 'important');
+  iframe.style.setProperty('border', 'none', 'important');
+  iframe.style.setProperty('z-index', '2147483647', 'important');
   iframe.style.setProperty('display', 'block', 'important');
   iframe.style.setProperty('visibility', 'visible', 'important');
   iframe.style.setProperty('opacity', '1', 'important');
-  iframe.style.setProperty('width', '100vw', 'important');
-  iframe.style.setProperty('height', '100vh', 'important');
   
-  console.log('Iframe criado e adicionado ao DOM. bounding rect:', iframe.getBoundingClientRect());
-  console.log('Computed iframe styles:', window.getComputedStyle(iframe));
-  
-  // Tentar preencher com srcdoc (mais compatível que document.write)
+  // Usar srcdoc (melhor compatibilidade)
   iframe.srcdoc = iframeHTML;
-
-  // Fallback: tentar document.write se srcdoc não funcionar
-  setTimeout(() => {
-    try {
-      if (!iframe.contentDocument.body || iframe.contentDocument.body.innerHTML.trim() === '') {
-        console.log('srcdoc não funcionou, tentando document.write...');
-        iframe.contentDocument.open();
-        iframe.contentDocument.write(iframeHTML);
-        iframe.contentDocument.close();
-      }
-    } catch (e) {
-      console.error('Erro ao escrever em iframe (fallback):', e);
-    }
-  }, 500);
+  
+  // Adicionar ao DOM
+  document.body.appendChild(iframe);
+  
+  console.log('Iframe criado. bounding rect:', iframe.getBoundingClientRect());
+  console.log('Iframe srcdoc definido');
   
   paymentModal.classList.add('hidden');
   document.body.style.overflow = 'hidden';
 
-  // FALLBACK: Se iframe não funcionar, criar modal div com conteúdo direto
+  // FALLBACK automático em 2 segundos se iframe não renderizar
   setTimeout(() => {
     try {
-      if (!iframe.contentDocument || !iframe.contentDocument.body || iframe.contentDocument.body.innerHTML.trim() === '') {
-        console.warn('Iframe não renderizou conteúdo. Usando fallback com div modal...');
-        
-        // Remover iframe que falhou
+      // Verificar se iframe tem conteúdo
+      const hasContent = iframe.contentDocument && 
+                         iframe.contentDocument.body && 
+                         iframe.contentDocument.body.innerHTML.trim().length > 0;
+      
+      if (!hasContent) {
+        console.warn('Iframe não renderizou. Criando fallback...');
         iframe.remove();
         
-        // Criar fallback em div
-        const fallbackModal = document.createElement('div');
-        fallbackModal.id = 'pix-modal-fallback';
-        fallbackModal.style.cssText = `
-          position: fixed !important; top: 0 !important; left: 0 !important;
-          width: 100vw !important; height: 100vh !important;
+        // Criar fallback em div com estilos agressivos
+        const fallback = document.createElement('div');
+        fallback.id = 'pix-modal-fallback';
+        fallback.style.cssText = `
+          position: fixed !important;
+          top: 0 !important;
+          left: 0 !important;
+          width: 100% !important;
+          height: 100% !important;
           background: rgba(0,0,0,0.6) !important;
-          display: flex !important; align-items: center !important; justify-content: center !important;
-          z-index: 2147483647 !important; padding: 20px !important; box-sizing: border-box !important;
+          display: flex !important;
+          align-items: center !important;
+          justify-content: center !important;
+          z-index: 2147483647 !important;
+          padding: 20px !important;
+          box-sizing: border-box !important;
+          margin: 0 !important;
+          border: none !important;
         `;
-        fallbackModal.innerHTML = `
+        
+        fallback.innerHTML = `
           <div style="
-            background: white !important; border-radius: 15px !important; padding: 40px !important;
-            text-align: center !important; max-width: 500px !important;
+            background: white !important;
+            border-radius: 15px !important;
+            padding: 40px !important;
+            text-align: center !important;
+            max-width: 500px !important;
             box-shadow: 0 10px 30px rgba(0,0,0,0.3) !important;
             box-sizing: border-box !important;
+            margin: 0 !important;
           ">
-            <h2 style="margin-bottom: 20px !important; color: #333 !important;">Escaneie o QR Code PIX</h2>
+            <h2 style="margin-bottom: 20px !important; color: #333 !important; margin: 0 0 20px 0 !important;">Escaneie o QR Code PIX</h2>
             ${ base64 ? `<img src="data:image/png;base64,${base64}" alt="QR PIX" style="max-width: 100% !important; width: 280px !important; height: 280px !important; margin: 20px auto !important; border: 2px solid #ddd !important; border-radius: 10px !important; display: block !important;">` : '' }
             <p style="color: #666 !important; margin: 12px 0 !important; font-size: 16px !important;">Valor: <strong style="color: #e74c3c !important;">R$ ${valorNumerico.toFixed(2)}</strong></p>
             ${ brcode ? `
               <label style="display: block !important; margin-top: 20px !important; font-size: 14px !important; color: #666 !important;">Código (copia & cola)</label>
-              <textarea id="fallback-brcode" readonly style="width: 100% !important; min-height: 100px !important; padding: 10px !important; margin-top: 10px !important; border-radius: 6px !important; border: 1px solid #ddd !important; font-size: 12px !important; font-family: monospace !important; box-sizing: border-box !important;">${brcode}</textarea>
+              <textarea id="fallback-brcode" readonly style="width: 100% !important; min-height: 100px !important; padding: 10px !important; margin-top: 10px !important; border-radius: 6px !important; border: 1px solid #ddd !important; font-size: 12px !important; font-family: monospace !important; box-sizing: border-box !important; margin: 10px 0 !important;">${brcode}</textarea>
               <button id="fallback-copy-btn" style="margin-top: 12px !important; padding: 10px 20px !important; background: #3498db !important; color: white !important; border: none !important; border-radius: 5px !important; cursor: pointer !important; font-size: 14px !important; font-weight: bold !important;">📋 Copiar código</button>
             ` : '' }
             <p style="color: #999 !important; font-size: 14px !important; margin: 10px 0 !important;">Aguardando confirmação do pagamento...</p>
@@ -551,9 +562,9 @@ function displayPixQrModal(pixData, amount, orderId) {
           </div>
         `;
         
-        document.body.appendChild(fallbackModal);
+        document.body.appendChild(fallback);
         
-        // Ligar botões do fallback
+        // Ligar eventos do fallback
         const copyBtn = document.getElementById('fallback-copy-btn');
         if (copyBtn) {
           copyBtn.addEventListener('click', function() {
@@ -567,17 +578,17 @@ function displayPixQrModal(pixData, amount, orderId) {
         
         const cancelBtn = document.getElementById('fallback-cancel-btn');
         if (cancelBtn) {
-          cancelBtn.addEventListener('click', () => {
-            cancelPixPayment('${orderId}');
-          });
+          cancelBtn.addEventListener('click', () => cancelPixPayment('${orderId}'));
         }
         
-        console.log('Fallback modal criado com sucesso (#pix-modal-fallback)');
+        console.log('Fallback modal criado (#pix-modal-fallback)');
+      } else {
+        console.log('✓ Iframe renderizou com sucesso');
       }
     } catch (e) {
-      console.error('Erro ao criar fallback:', e);
+      console.error('Erro ao verificar iframe:', e);
     }
-  }, 1000);
+  }, 2000);
 }
 
 // Fazer polling para verificar status do pagamento

@@ -363,232 +363,96 @@ async function generatePixPayment(orderId, amount) {
   }
 }
 
-// Exibir modal com QR Code PIX em iframe isolado
+// Exibir modal com QR Code PIX
 function displayPixQrModal(pixData, amount, orderId) {
   const valorNumerico = parseFloat(amount);
   
-  // Remover modal/iframe anterior se existir
-  const existingIframe = document.getElementById('pix-qr-iframe');
-  if (existingIframe) existingIframe.remove();
+  // Remover qualquer modal anterior
+  const existing = document.getElementById('pix-qr-modal');
+  if (existing) existing.remove();
 
-  // Determinar fonte do QR: base64, URL ou código BRcode (copia & cola)
+  // Determinar fonte do QR
   const base64 = pixData.qrCodeBase64 || pixData.qr_code_base64 || null;
   const qrUrl = pixData.qrCodeUrl || pixData.qr_code_url || null;
   const brcode = pixData.qrCode || pixData.qr_code || pixData.qr || null;
 
   console.log('displayPixQrModal - fontes detectadas:', { base64, qrUrl, brcode });
 
-  // Bloquear scroll imediatamente
-  document.body.style.overflow = 'hidden';
-  
-  // Criar iframe para isolar do CSS da página
-  const iframe = document.createElement('iframe');
-  iframe.id = 'pix-qr-iframe';
-  iframe.setAttribute('sandbox', 'allow-same-origin');
-  
-  // HTML do modal dentro do iframe
-  const iframeHTML = `
-    <!doctype html>
-    <html lang="pt-BR">
-    <head>
-      <meta charset="utf-8">
-      <title>PIX - Victor Farma</title>
-      <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body {
-          font-family: Arial, sans-serif;
-          background: rgba(0,0,0,0.6);
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          width: 100vw !important;
-          height: 100vh !important;
-          min-height: 100vh;
-          padding: 20px;
-        }
-        .modal-content {
-          background: white;
-          border-radius: 15px;
-          padding: 40px;
-          text-align: center;
-          max-width: 500px;
-          box-shadow: 0 10px 30px rgba(0,0,0,0.3);
-        }
-        h2 { margin-bottom: 20px; color: #333; }
-        img { max-width: 100%; width: 280px; height: 280px; margin: 20px auto; border: 2px solid #ddd; border-radius: 10px; display: block; }
-        p { color: #666; margin: 12px 0; font-size: 16px; }
-        .valor { color: #e74c3c; font-weight: bold; }
-        .info-text { color: #999; font-size: 14px; margin: 10px 0; }
-        .success-text { color: #27ae60; font-size: 14px; margin-top: 20px; }
-        textarea {
-          width: 100%;
-          min-height: 100px;
-          padding: 10px;
-          margin-top: 10px;
-          border-radius: 6px;
-          border: 1px solid #ddd;
-          font-size: 12px;
-          font-family: monospace;
-          resize: vertical;
-        }
-        button {
-          margin-top: 12px;
-          padding: 10px 20px;
-          border: none;
-          border-radius: 5px;
-          cursor: pointer;
-          font-size: 14px;
-          font-weight: bold;
-          color: white;
-        }
-        #copy-btn { background: #3498db; }
-        #copy-btn:hover { background: #2980b9; }
-        #cancel-btn { background: #e74c3c; margin-top: 20px; }
-        #cancel-btn:hover { background: #c0392b; }
-        .label { margin-top: 20px; font-size: 14px; color: #666; display: block; }
-      </style>
-    </head>
-    <body>
-      <div class="modal-content">
-        <h2>Escaneie o QR Code PIX</h2>
-        ${ base64 ? `<img src="data:image/png;base64,${base64}" alt="QR PIX">` : (qrUrl ? `<img src="${qrUrl}" alt="QR PIX">` : '') }
-        <p><span class="valor">R$ ${valorNumerico.toFixed(2)}</span></p>
-        ${ brcode ? `
-          <label class="label">Código (copia & cola)</label>
-          <textarea id="brcode-text" readonly>${brcode}</textarea>
-          <button id="copy-btn">📋 Copiar código</button>
-        ` : '' }
-        <p class="info-text">Aguardando confirmação do pagamento...</p>
-        <p class="success-text">✓ Verifique seu app de banco e confirme o pagamento</p>
-        <button id="cancel-btn">Cancelar</button>
-      </div>
-      <script>
-        document.getElementById('copy-btn')?.addEventListener('click', function() {
-          const ta = document.getElementById('brcode-text');
-          if (ta) {
-            ta.select();
-            document.execCommand('copy');
-            this.textContent = '✓ Copiado!';
-            setTimeout(() => { this.textContent = '📋 Copiar código'; }, 2000);
-          }
-        });
-        document.getElementById('cancel-btn')?.addEventListener('click', function() {
-          window.parent.cancelPixPayment('${orderId}');
-        });
-        console.log('iframe content carregado com sucesso');
-      </script>
-    </body>
-    </html>
+  // Criar overlay (escurecimento)
+  const overlay = document.createElement('div');
+  overlay.id = 'pix-qr-modal';
+  overlay.style.cssText = `
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    width: 100% !important;
+    height: 100% !important;
+    background: rgba(0,0,0,0.6) !important;
+    z-index: 2147483647 !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    margin: 0 !important;
+    padding: 20px !important;
+    box-sizing: border-box !important;
+    font-family: Arial, sans-serif !important;
   `;
 
-  // Aplicar estilos de preenchimento antes de adicionar ao DOM
-  iframe.style.setProperty('position', 'fixed', 'important');
-  iframe.style.setProperty('top', '0', 'important');
-  iframe.style.setProperty('left', '0', 'important');
-  iframe.style.setProperty('width', '100%', 'important');
-  iframe.style.setProperty('height', '100%', 'important');
-  iframe.style.setProperty('border', 'none', 'important');
-  iframe.style.setProperty('z-index', '2147483647', 'important');
-  iframe.style.setProperty('display', 'block', 'important');
-  iframe.style.setProperty('visibility', 'visible', 'important');
-  iframe.style.setProperty('opacity', '1', 'important');
-  
-  // Usar srcdoc (melhor compatibilidade)
-  iframe.srcdoc = iframeHTML;
-  
-  // Adicionar ao DOM
-  document.body.appendChild(iframe);
-  
-  console.log('Iframe criado. bounding rect:', iframe.getBoundingClientRect());
-  console.log('Iframe srcdoc definido');
-  
-  paymentModal.classList.add('hidden');
+  // Container do card
+  const card = document.createElement('div');
+  card.style.cssText = `
+    background: white !important;
+    border-radius: 15px !important;
+    padding: 40px !important;
+    text-align: center !important;
+    max-width: 500px !important;
+    width: 100% !important;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.3) !important;
+    box-sizing: border-box !important;
+    margin: 0 !important;
+  `;
+
+  // Conteúdo HTML
+  card.innerHTML = `
+    <h2 style="margin: 0 0 20px 0 !important; color: #333 !important; font-size: 24px !important;">Escaneie o QR Code PIX</h2>
+    ${base64 ? `<img src="data:image/png;base64,${base64}" alt="QR PIX" style="max-width: 100% !important; width: 280px !important; height: 280px !important; margin: 20px auto !important; border: 2px solid #ddd !important; border-radius: 10px !important; display: block !important;">` : ''}
+    <p style="color: #666 !important; margin: 12px 0 !important; font-size: 16px !important;">Valor: <strong style="color: #e74c3c !important;">R$ ${valorNumerico.toFixed(2)}</strong></p>
+    ${brcode ? `
+      <label style="display: block !important; margin-top: 20px !important; font-size: 14px !important; color: #666 !important;">Código (copia & cola)</label>
+      <textarea id="pix-brcode" readonly style="width: 100% !important; min-height: 100px !important; padding: 10px !important; margin-top: 10px !important; border-radius: 6px !important; border: 1px solid #ddd !important; font-size: 12px !important; font-family: monospace !important; box-sizing: border-box !important; resize: vertical !important;">${brcode}</textarea>
+      <button id="pix-copy" style="margin-top: 12px !important; padding: 10px 20px !important; background: #3498db !important; color: white !important; border: none !important; border-radius: 5px !important; cursor: pointer !important; font-size: 14px !important; font-weight: bold !important;">📋 Copiar código</button>
+    ` : ''}
+    <p style="color: #999 !important; font-size: 14px !important; margin: 10px 0 !important;">Aguardando confirmação do pagamento...</p>
+    <p style="color: #27ae60 !important; font-size: 14px !important; margin-top: 20px !important;">✓ Verifique seu app de banco e confirme o pagamento</p>
+    <button id="pix-cancel" style="margin-top: 20px !important; padding: 12px 30px !important; background: #e74c3c !important; color: white !important; border: none !important; border-radius: 5px !important; cursor: pointer !important; font-size: 16px !important; font-weight: bold !important;">Cancelar</button>
+  `;
+
+  overlay.appendChild(card);
+  document.body.appendChild(overlay);
   document.body.style.overflow = 'hidden';
 
-  // FALLBACK automático em 2 segundos se iframe não renderizar
-  setTimeout(() => {
-    try {
-      // Verificar se iframe tem conteúdo
-      const hasContent = iframe.contentDocument && 
-                         iframe.contentDocument.body && 
-                         iframe.contentDocument.body.innerHTML.trim().length > 0;
-      
-      if (!hasContent) {
-        console.warn('Iframe não renderizou. Criando fallback...');
-        iframe.remove();
-        
-        // Criar fallback em div com estilos agressivos
-        const fallback = document.createElement('div');
-        fallback.id = 'pix-modal-fallback';
-        fallback.style.cssText = `
-          position: fixed !important;
-          top: 0 !important;
-          left: 0 !important;
-          width: 100% !important;
-          height: 100% !important;
-          background: rgba(0,0,0,0.6) !important;
-          display: flex !important;
-          align-items: center !important;
-          justify-content: center !important;
-          z-index: 2147483647 !important;
-          padding: 20px !important;
-          box-sizing: border-box !important;
-          margin: 0 !important;
-          border: none !important;
-        `;
-        
-        fallback.innerHTML = `
-          <div style="
-            background: white !important;
-            border-radius: 15px !important;
-            padding: 40px !important;
-            text-align: center !important;
-            max-width: 500px !important;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.3) !important;
-            box-sizing: border-box !important;
-            margin: 0 !important;
-          ">
-            <h2 style="margin-bottom: 20px !important; color: #333 !important; margin: 0 0 20px 0 !important;">Escaneie o QR Code PIX</h2>
-            ${ base64 ? `<img src="data:image/png;base64,${base64}" alt="QR PIX" style="max-width: 100% !important; width: 280px !important; height: 280px !important; margin: 20px auto !important; border: 2px solid #ddd !important; border-radius: 10px !important; display: block !important;">` : '' }
-            <p style="color: #666 !important; margin: 12px 0 !important; font-size: 16px !important;">Valor: <strong style="color: #e74c3c !important;">R$ ${valorNumerico.toFixed(2)}</strong></p>
-            ${ brcode ? `
-              <label style="display: block !important; margin-top: 20px !important; font-size: 14px !important; color: #666 !important;">Código (copia & cola)</label>
-              <textarea id="fallback-brcode" readonly style="width: 100% !important; min-height: 100px !important; padding: 10px !important; margin-top: 10px !important; border-radius: 6px !important; border: 1px solid #ddd !important; font-size: 12px !important; font-family: monospace !important; box-sizing: border-box !important; margin: 10px 0 !important;">${brcode}</textarea>
-              <button id="fallback-copy-btn" style="margin-top: 12px !important; padding: 10px 20px !important; background: #3498db !important; color: white !important; border: none !important; border-radius: 5px !important; cursor: pointer !important; font-size: 14px !important; font-weight: bold !important;">📋 Copiar código</button>
-            ` : '' }
-            <p style="color: #999 !important; font-size: 14px !important; margin: 10px 0 !important;">Aguardando confirmação do pagamento...</p>
-            <p style="color: #27ae60 !important; font-size: 14px !important; margin-top: 20px !important;">✓ Verifique seu app de banco e confirme o pagamento</p>
-            <button id="fallback-cancel-btn" style="margin-top: 20px !important; padding: 12px 30px !important; background: #e74c3c !important; color: white !important; border: none !important; border-radius: 5px !important; cursor: pointer !important; font-size: 16px !important; font-weight: bold !important;">Cancelar</button>
-          </div>
-        `;
-        
-        document.body.appendChild(fallback);
-        
-        // Ligar eventos do fallback
-        const copyBtn = document.getElementById('fallback-copy-btn');
-        if (copyBtn) {
-          copyBtn.addEventListener('click', function() {
-            const ta = document.getElementById('fallback-brcode');
-            ta.select();
-            document.execCommand('copy');
-            this.textContent = '✓ Copiado!';
-            setTimeout(() => { this.textContent = '📋 Copiar código'; }, 2000);
-          });
-        }
-        
-        const cancelBtn = document.getElementById('fallback-cancel-btn');
-        if (cancelBtn) {
-          cancelBtn.addEventListener('click', () => cancelPixPayment('${orderId}'));
-        }
-        
-        console.log('Fallback modal criado (#pix-modal-fallback)');
-      } else {
-        console.log('✓ Iframe renderizou com sucesso');
-      }
-    } catch (e) {
-      console.error('Erro ao verificar iframe:', e);
-    }
-  }, 2000);
+  console.log('Modal QR criado. overlay rect:', overlay.getBoundingClientRect());
+
+  // Ligar botões
+  const copyBtn = document.getElementById('pix-copy');
+  if (copyBtn) {
+    copyBtn.addEventListener('click', function() {
+      const ta = document.getElementById('pix-brcode');
+      ta.select();
+      document.execCommand('copy');
+      this.textContent = '✓ Copiado!';
+      setTimeout(() => { this.textContent = '📋 Copiar código'; }, 2000);
+    });
+  }
+
+  const cancelBtn = document.getElementById('pix-cancel');
+  if (cancelBtn) {
+    cancelBtn.addEventListener('click', () => {
+      cancelPixPayment(orderId);
+    });
+  }
+
+  paymentModal.classList.add('hidden');
 }
 
 // Fazer polling para verificar status do pagamento
@@ -627,10 +491,8 @@ function startPaymentPolling(paymentId, orderId) {
 
 // PIX confirmado com sucesso
 function completePixPayment(order) {
-  const iframe = document.getElementById('pix-qr-iframe');
-  if (iframe) iframe.remove();
-  const fallback = document.getElementById('pix-modal-fallback');
-  if (fallback) fallback.remove();
+  const modal = document.getElementById('pix-qr-modal');
+  if (modal) modal.remove();
   document.body.style.overflow = 'auto';
 
   currentOrder = order;
@@ -640,10 +502,8 @@ function completePixPayment(order) {
 // Cancelar pagamento PIX
 function cancelPixPayment(orderId) {
   clearInterval(paymentPollingInterval);
-  const iframe = document.getElementById('pix-qr-iframe');
-  if (iframe) iframe.remove();
-  const fallback = document.getElementById('pix-modal-fallback');
-  if (fallback) fallback.remove();
+  const modal = document.getElementById('pix-qr-modal');
+  if (modal) modal.remove();
   document.body.style.overflow = 'auto';
   paymentModal.classList.add('hidden');
   alert('Pagamento cancelado');
@@ -651,10 +511,8 @@ function cancelPixPayment(orderId) {
 
 // Timeout do pagamento
 function pixPaymentTimeout(orderId) {
-  const iframe = document.getElementById('pix-qr-iframe');
-  if (iframe) iframe.remove();
-  const fallback = document.getElementById('pix-modal-fallback');
-  if (fallback) fallback.remove();
+  const modal = document.getElementById('pix-qr-modal');
+  if (modal) modal.remove();
   document.body.style.overflow = 'auto';
   alert('Tempo de pagamento expirado. Tente novamente.');
 }

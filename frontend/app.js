@@ -33,7 +33,11 @@ const categoryFilter = document.getElementById('category-filter');
 
 // Event Listeners
 cartBtn.addEventListener('click', () => {
+  console.log('🛒 Clique no carrinho detectado');
+  console.log('cartModal:', cartModal);
+  console.log('classList antes:', cartModal.className);
   cartModal.classList.remove('hidden');
+  console.log('classList depois:', cartModal.className);
   loadCart();
 });
 

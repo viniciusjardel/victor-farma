@@ -584,10 +584,18 @@ function displayPixQrModal(pixData, amount, orderId) {
   void overlay.offsetHeight;
   void overlay.offsetWidth;
   
-  console.log('✅ Overlay PIX criado:', overlay.id);
-  console.log('✅ Overlay visível:', overlay.offsetParent !== null);
-  console.log('✅ Overlay display:', window.getComputedStyle(overlay).display);
-  console.log('✅ Overlay z-index:', window.getComputedStyle(overlay).zIndex);
+  // ⚠️ FORÇAR VISIBILIDADE COM setTi meout (dar tempo para reflow completo)
+  setTimeout(() => {
+    overlay.style.visibility = 'visible';
+    overlay.style.opacity = '1';
+    
+    console.log('✅ Overlay PIX criado:', overlay.id);
+    console.log('✅ Overlay visível:', overlay.offsetParent !== null);
+    console.log('✅ Overlay display:', window.getComputedStyle(overlay).display);
+    console.log('✅ Overlay visibility:', window.getComputedStyle(overlay).visibility);
+    console.log('✅ Overlay z-index:', window.getComputedStyle(overlay).zIndex);
+    console.log('✅ Overlay offsetParent:', overlay.offsetParent);
+  }, 100);
 
   document.body.style.overflow = 'hidden';
 

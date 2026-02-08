@@ -7,6 +7,7 @@ let userId = localStorage.getItem('userId') || generateUserId();
 let cart = [];
 let products = [];
 let currentOrder = null;
+let paymentPollingInterval = null;
 
 // Gerar ID do usuário
 function generateUserId() {
@@ -43,7 +44,6 @@ checkoutBtn.addEventListener('click', () => {
 
 checkoutForm.addEventListener('submit', handleCheckout);
 
-document.getElementById('confirm-payment-btn').addEventListener('click', confirmPayment);
 document.getElementById('back-to-products-btn').addEventListener('click', () => {
   confirmationModal.classList.add('hidden');
   location.reload();
@@ -274,9 +274,8 @@ async function handleCheckout(e) {
     const data = await response.json();
     currentOrder = data.order;
 
-    // Exibir modal de pagamento
-    checkoutModal.classList.add('hidden');
-    displayPaymentModal(data.pixQRCode, data.order.total, data.order.id);
+    // Gerar PIX real do Mercado Pago
+    generatePixPayment(data.order.id, data.order.total);
   } catch (error) {
     console.error('Erro:', error);
     alert('Erro ao processar pedido');
@@ -291,26 +290,154 @@ function displayPaymentModal(pixQRCode, amount, orderId) {
   paymentModal.classList.remove('hidden');
 }
 
-// Confirmar pagamento
-async function confirmPayment() {
+// Gerar PIX real do Mercado Pago
+async function generatePixPayment(orderId, amount) {
   try {
-    const response = await fetch(`${API_URL}/orders/${currentOrder.id}/confirm-payment`, {
+    checkoutModal.classList.add('hidden');
+    
+    // Mostrar loading
+    const loadingDiv = document.createElement('div');
+    loadingDiv.id = 'pix-loading';
+    loadingDiv.style.cssText = `
+      position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+      background: white; padding: 40px; border-radius: 10px; 
+      box-shadow: 0 4px 6px rgba(0,0,0,0.1); z-index: 1000;
+    `;
+    loadingDiv.innerHTML = '<p style="font-size: 18px;">Gerando QR Code PIX...</p>';
+    document.body.appendChild(loadingDiv);
+
+    const response = await fetch(`${API_URL}/orders/${orderId}/generate-pix`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' }
     });
 
     if (!response.ok) {
-      alert('Erro ao confirmar pagamento');
+      loadingDiv.remove();
+      const error = await response.json();
+      alert(error.error || 'Erro ao gerar PIX');
       return;
     }
 
-    // Exibir confirmação
-    paymentModal.classList.add('hidden');
-    showConfirmation(currentOrder);
+    const pixData = await response.json();
+    loadingDiv.remove();
+
+    // Exibir modal com QR code
+    displayPixQrModal(pixData, amount, orderId);
+    
+    // Iniciar polling para verificar status
+    startPaymentPolling(pixData.paymentId, orderId);
+
   } catch (error) {
-    console.error('Erro:', error);
-    alert('Erro ao confirmar pagamento');
+    console.error('Erro ao gerar PIX:', error);
+    const loading = document.getElementById('pix-loading');
+    if (loading) loading.remove();
+    alert('Erro ao gerar PIX');
   }
+}
+
+// Exibir modal com QR Code PIX
+function displayPixQrModal(pixData, amount, orderId) {
+  // Criar modal
+  const modal = document.createElement('div');
+  modal.id = 'pix-qr-modal';
+  modal.style.cssText = `
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    background: rgba(0,0,0,0.5); display: flex; align-items: center; 
+    justify-content: center; z-index: 999;
+  `;
+  
+  modal.innerHTML = `
+    <div style="
+      background: white; border-radius: 15px; padding: 40px;
+      text-align: center; max-width: 500px; box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+    ">
+      <h2 style="margin-bottom: 20px; color: #333;">Escaneie o QR Code PIX</h2>
+      
+      <img id="qr-code-pix-img" src="data:image/png;base64,${pixData.qrCodeBase64}" 
+        style="width: 280px; height: 280px; margin: 20px auto; border: 2px solid #ddd; border-radius: 10px;">
+      
+      <p style="color: #666; margin: 20px 0; font-size: 16px;">
+        Valor: <strong>R$ ${amount.toFixed(2)}</strong>
+      </p>
+      
+      <p style="color: #999; font-size: 14px; margin: 10px 0;">
+        Aguardando confirmação do pagamento...
+      </p>
+      
+      <p style="color: #27ae60; font-size: 14px; margin-top: 20px;">
+        ✓ Verifique seu app de banco e confirme o pagamento
+      </p>
+      
+      <button onclick="cancelPixPayment('${orderId}')" style="
+        margin-top: 30px; padding: 12px 30px; background: #e74c3c; color: white;
+        border: none; border-radius: 5px; cursor: pointer; font-size: 16px;
+      ">
+        Cancelar
+      </button>
+    </div>
+  `;
+  
+  document.body.appendChild(modal);
+  paymentModal.classList.add('hidden');
+}
+
+// Fazer polling para verificar status do pagamento
+function startPaymentPolling(paymentId, orderId) {
+  let attempts = 0;
+  const maxAttempts = 120; // 10 minutos (cda 5 segundos)
+
+  paymentPollingInterval = setInterval(async () => {
+    attempts++;
+
+    try {
+      const response = await fetch(`${API_URL}/orders/${orderId}`);
+      if (!response.ok) return;
+
+      const data = await response.json();
+      const order = data.order;
+
+      // Se pagamento foi confirmado (webhook atualiza status)
+      if (order.status === 'confirmed' && order.payment_status === 'approved') {
+        clearInterval(paymentPollingInterval);
+        completePixPayment(order);
+        return;
+      }
+
+    } catch (error) {
+      console.error('Erro ao verificar pagamento:', error);
+    }
+
+    // Timeout após 10 minutos
+    if (attempts >= maxAttempts) {
+      clearInterval(paymentPollingInterval);
+      pixPaymentTimeout(orderId);
+    }
+  }, 5000); // Verificar a cada 5 segundos
+}
+
+// PIX confirmado com sucesso
+function completePixPayment(order) {
+  const modal = document.getElementById('pix-qr-modal');
+  if (modal) modal.remove();
+
+  currentOrder = order;
+  showConfirmation(order);
+}
+
+// Cancelar pagamento PIX
+function cancelPixPayment(orderId) {
+  clearInterval(paymentPollingInterval);
+  const modal = document.getElementById('pix-qr-modal');
+  if (modal) modal.remove();
+  paymentModal.classList.add('hidden');
+  alert('Pagamento cancelado');
+}
+
+// Timeout do pagamento
+function pixPaymentTimeout(orderId) {
+  const modal = document.getElementById('pix-qr-modal');
+  if (modal) modal.remove();
+  alert('Tempo de pagamento expirado. Tente novamente.');
 }
 
 // Mostrar confirmação

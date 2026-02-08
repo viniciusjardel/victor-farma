@@ -166,26 +166,28 @@ module.exports = (pool) => {
     try {
       const { paymentId, status, orderId } = req.body;
 
-      if (!paymentId || !status) {
+      if (!paymentId || !status || !orderId) {
+        console.warn('Webhook: Dados inválidos -', { paymentId, status, orderId });
         return res.status(400).json({ error: 'Dados inválidos' });
       }
 
-      // Atualizar status do pagamento no pedido
+      // Atualizar status do pagamento no pedido usando orderId
       const updateResult = await pool.query(
-        'UPDATE orders SET payment_status = $1, status = $2 WHERE payment_id = $3 RETURNING *',
-        [status, status === 'approved' ? 'confirmed' : 'pending', paymentId]
+        'UPDATE orders SET payment_status = $1, status = $2, payment_id = $3 WHERE id = $4 RETURNING *',
+        [status, status === 'approved' ? 'confirmed' : 'pending', paymentId, orderId]
       );
 
       if (updateResult.rows.length === 0) {
-        console.warn(`Webhook: Pedido com payment_id ${paymentId} não encontrado`);
+        console.warn(`Webhook: Pedido com ID ${orderId} não encontrado`);
         return res.json({ message: 'Processado' }); // Não retorna erro pro webhook
       }
 
-      console.log(`✅ Webhook PIX: Pagamento ${paymentId} atualizado para ${status}`);
+      const order = updateResult.rows[0];
+      console.log(`✅ Webhook PIX: Pedido ${orderId} atualizado para status=${order.status}, payment_status=${order.payment_status}`);
 
       res.json({ 
         message: 'Webhook processado com sucesso',
-        order: updateResult.rows[0]
+        order
       });
 
     } catch (error) {

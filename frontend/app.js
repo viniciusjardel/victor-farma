@@ -101,23 +101,45 @@ document.addEventListener('DOMContentLoaded', () => {
 // Buscar produtos
 async function loadProducts() {
   try {
+    console.log('🔄 Iniciando carregamento de produtos de:', `${API_URL}/products`);
     const response = await fetch(`${API_URL}/products`);
+    console.log('✓ Resposta recebida:', response.status, response.statusText);
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    }
     const data = await response.json();
-    products = data;
+    console.log('✓ Produtos carregados:', data);
+    products = Array.isArray(data) ? data : (data.products || []);
+    console.log('✓ Total de produtos:', products.length);
     displayProducts(products);
   } catch (error) {
-    console.error('Erro ao carregar produtos:', error);
-    productsContainer.innerHTML = '<p class="loading">Erro ao carregar produtos. Tente novamente.</p>';
+    console.error('❌ Erro ao carregar produtos:', error);
+    if (productsContainer) {
+      productsContainer.innerHTML = '<p class="text-center text-red-500 py-12">Erro ao carregar produtos. Tente recarregar a página.</p>';
+    }
   }
 }
 
 // Exibir produtos
 function displayProducts(productsToDisplay) {
+  if (!productsContainer) {
+    console.error('❌ productsContainer não encontrado no DOM');
+    return;
+  }
+  
+  if (!Array.isArray(productsToDisplay)) {
+    console.error('❌ productsToDisplay não é um array:', productsToDisplay);
+    productsContainer.innerHTML = '<p class="text-center text-red-500 py-12">Erro: dados inválidos</p>';
+    return;
+  }
+  
   if (productsToDisplay.length === 0) {
+    console.warn('⚠️ Nenhum produto encontrado');
     productsContainer.innerHTML = '<p class="col-span-full text-center text-gray-500 py-12">Nenhum produto encontrado</p>';
     return;
   }
 
+  console.log('📦 Renderizando', productsToDisplay.length, 'produtos');
   productsContainer.innerHTML = productsToDisplay.map(product => `
     <div class="bg-white rounded-lg shadow hover:shadow-lg product-card overflow-hidden flex flex-col" data-product-id="${product.id}">
       <div class="bg-gradient-to-br from-green-100 to-green-50 h-32 sm:h-40 flex items-center justify-center overflow-hidden">
@@ -439,11 +461,6 @@ async function generatePixPayment(orderId, amount) {
     // Exibir modal com QR code (com fallback para diferentes campos retornados)
     displayPixQrModal(pixData, amount, orderId);
 
-    // Iniciar polling para verificar status
-    const paymentId = pixData.paymentId || pixData.id || pixData.payment_id;
-    console.log('Iniciando polling com paymentId:', paymentId, 'orderId:', orderId);
-    startPaymentPolling(paymentId, orderId);
-
   } catch (error) {
     console.error('Erro ao gerar PIX:', error);
     const loading = document.getElementById('pix-loading');
@@ -460,12 +477,15 @@ function displayPixQrModal(pixData, amount, orderId) {
   const existing = document.getElementById('pix-qr-modal');
   if (existing) existing.remove();
 
+  // Extrair paymentId de pixData
+  const paymentId = pixData.paymentId || pixData.id || pixData.payment_id || null;
+  
   // Determinar fonte do QR
   const base64 = pixData.qrCodeBase64 || pixData.qr_code_base64 || null;
   const qrUrl = pixData.qrCodeUrl || pixData.qr_code_url || null;
   const brcode = pixData.qrCode || pixData.qr_code || pixData.qr || null;
 
-  console.log('displayPixQrModal - fontes detectadas:', { base64, qrUrl, brcode });
+  console.log('displayPixQrModal - fontes detectadas:', { base64, qrUrl, brcode, paymentId });
 
   // Criar overlay (escurecimento) — SEM classes, apenas inline styles com !important via cssText
   const overlay = document.createElement('div');
@@ -518,36 +538,38 @@ function displayPixQrModal(pixData, amount, orderId) {
     card.style.cssText = card.style.cssText.replace('padding: 40px !important;', 'padding: 20px !important;');
   }
 
-  // Conteúdo HTML (suporta base64 ou URL) — QR responsivo + código copia e cola juntos
-  const qrSize = window.innerWidth < 480 ? '200px' : '280px';
-  const titleSize = window.innerWidth < 480 ? '18px' : '24px';
-  
+  // Novo layout do modal: espelhando o design fornecido
+  const qrSize = window.innerWidth < 420 ? '200px' : '300px';
   card.innerHTML = `
-    <div style="font-size: ${titleSize} !important; font-weight: bold !important; color: #333 !important; margin-bottom: 30px !important;">Escaneie o QR Code PIX</div>
-    
-    <div style="margin-bottom: 30px !important;">
-      ${base64 ? `<img src="data:image/png;base64,${base64}" alt="QR PIX" style="display: block !important; margin: 0 auto !important; width: ${qrSize} !important; height: ${qrSize} !important; border: 3px solid #10b981 !important; border-radius: 12px !important; background: white !important;">` : (qrUrl ? `<img src="${qrUrl}" alt="QR PIX" style="display: block !important; margin: 0 auto !important; width: ${qrSize} !important; height: ${qrSize} !important; border: 3px solid #10b981 !important; border-radius: 12px !important;">` : '<div style="text-align: center; color: #999;">QR Code não disponível</div>')}
+    <div style="font-size: 20px; font-weight: 800; color: #0f172a; margin-bottom: 16px;">💳 Pagamento via PIX</div>
+
+    <div style="display:flex; justify-content:center; margin-bottom:18px;">
+      <div style="padding:12px; border-radius:14px; background: linear-gradient(180deg, rgba(239, 240, 255, 0.8), rgba(250,250,255,0.6)); border: 6px solid rgba(236, 213, 255, 0.6); display:inline-block;">
+        ${base64 ? `<img src="data:image/png;base64,${base64}" alt="QR PIX" style="display:block; width:${qrSize}; height:${qrSize}; object-fit:contain; border-radius:8px; background:#fff;">` : (qrUrl ? `<img src="${qrUrl}" alt="QR PIX" style="display:block; width:${qrSize}; height:${qrSize}; object-fit:contain; border-radius:8px; background:#fff;">` : '<div style="width:'+qrSize+';height:'+qrSize+';display:flex;align-items:center;justify-content:center;color:#999;background:#fff;border-radius:8px;">QR indisponível</div>')}
+      </div>
     </div>
-    
-    <div style="background: #f0f9ff !important; padding: 15px !important; border-radius: 8px !important; margin-bottom: 20px !important; border-left: 4px solid #3b82f6 !important;">
-      <div style="color: #666 !important; font-size: 14px !important; margin-bottom: 10px !important; font-weight: 500 !important;">Valor:</div>
-      <div style="color: #dc2626 !important; font-size: 20px !important; font-weight: bold !important;">R$ ${valorNumerico.toFixed(2)}</div>
-    </div>
-    
+
+    <div id="pix-status-msg" style="display:flex; align-items:center; gap:8px; color:#6b21a8; font-weight:600; margin-bottom:8px;">⏳ Aguardando pagamento...</div>
+
     ${brcode ? `
-      <div style="margin-bottom: 20px !important;">
-        <div style="text-align: left !important; margin-bottom: 10px !important;">
-          <label style="display: block !important; font-size: 13px !important; color: #666 !important; font-weight: 600 !important; text-transform: uppercase !important;">Chave PIX (Copia & Cola):</label>
+      <div style="margin-bottom:12px;">
+        <div style="font-size:12px; color:#6b7280; font-weight:700; margin-bottom:6px;">Cód. PIX (Copia & Cola)</div>
+        <div style="display:flex; gap:8px;">
+          <input id="pix-brcode" readonly value="${brcode}" style="flex:1; padding:10px 12px; border:1px solid #e6e6f0; border-radius:8px; background:#fff; font-family:monospace; font-size:13px; color:#111;"/>
+          <button id="pix-copy" style="background:#7c3aed; color:#fff; border:none; padding:10px 12px; border-radius:8px; font-weight:700;">📋 Copiar</button>
         </div>
-        <textarea id="pix-brcode" readonly style="width: 100% !important; min-height: 70px !important; padding: 12px !important; border: 1px solid #e5e7eb !important; border-radius: 8px !important; font-size: 12px !important; font-family: 'Courier New', monospace !important; resize: none !important; box-sizing: border-box !important; background: #fafafa !important; color: #333 !important;">${brcode}</textarea>
-        <button id="pix-copy" style="width: 100% !important; margin-top: 10px !important; padding: 12px !important; background: #3b82f6 !important; color: white !important; border: none !important; border-radius: 8px !important; cursor: pointer !important; font-size: 14px !important; font-weight: 600 !important; transition: background 0.2s !important; hover: background: #2563eb !important;" onmouseover="this.style.background='#2563eb'" onmouseout="this.style.background='#3b82f6'">📋 Copiar Chave PIX</button>
       </div>
     ` : ''}
-    
-    <div id="pix-status-msg" style="color: #10b981 !important; font-size: 13px !important; margin: 20px 0 !important; font-weight: 500 !important;">⏳ Aguardando confirmação do pagamento...</div>
-    
-    <div style="display: flex !important; gap: 10px !important; justify-content: center !important; margin-top: 20px !important;">
-      <button id="pix-cancel" style="padding: 12px 24px !important; background: #dc2626 !important; color: white !important; border: none !important; border-radius: 8px !important; cursor: pointer !important; font-size: 14px !important; font-weight: 600 !important; transition: background 0.2s !important; width: 100% !important;" onmouseover="this.style.background='#b91c1c'" onmouseout="this.style.background='#dc2626'">❌ Cancelar</button>
+
+    <div style="margin:14px 0; padding:14px; background:#ecfdf5; border-radius:10px; text-align:center; border:1px solid #bbf7d0;">
+      <div style="font-size:12px; color:#065f46;">Total a pagar:</div>
+      <div style="font-size:20px; font-weight:800; color:#047857;">R$ ${valorNumerico.toFixed(2)}</div>
+    </div>
+
+    <div style="display:flex; flex-direction:column; gap:10px; margin-top:6px;">
+      <button id="pix-whatsapp" style="background:#10b981; color:white; border:none; padding:12px; border-radius:10px; font-weight:800;">📱 Enviar Pedido pelo WhatsApp</button>
+      <button id="pix-cancel" style="background:#ef4444; color:white; border:none; padding:12px; border-radius:10px; font-weight:800;">✖ Cancelar Compra</button>
+      <button id="pix-back" style="background:#6b7280; color:white; border:none; padding:10px; border-radius:10px; font-weight:700;">← Voltar</button>
     </div>
   `;
 
@@ -595,42 +617,106 @@ function displayPixQrModal(pixData, amount, orderId) {
     console.warn('Erro ao disparar checkOrderStatus imediato:', e);
   }
 
+  // Iniciar polling periódico caso tenhamos paymentId
+  if (paymentId) {
+    console.log('⏳ Iniciando polling com paymentId:', paymentId, 'orderId:', orderId);
+    try { startPaymentPolling(paymentId, orderId); } catch (e) { console.warn('Erro ao iniciar polling:', e); }
+  } else {
+    console.warn('⚠️ Nenhum paymentId obtido, polling não iniciado');
+  }
+
+  // Botão WhatsApp
+  const waBtn = document.getElementById('pix-whatsapp');
+  if (waBtn) {
+    waBtn.addEventListener('click', () => {
+      const chave = document.getElementById('pix-brcode') ? document.getElementById('pix-brcode').value : '';
+      const texto = `Olá, segue o pagamento PIX para o pedido ${orderId} - Total: R$ ${valorNumerico.toFixed(2)}.\nChave PIX:\n${chave}`;
+      const url = `https://wa.me/?text=${encodeURIComponent(texto)}`;
+      window.open(url, '_blank');
+    });
+  }
+
+  // Botão Voltar — apenas fecha o modal sem cancelar o pedido automaticamente
+  const backBtn = document.getElementById('pix-back');
+  if (backBtn) {
+    backBtn.addEventListener('click', () => {
+      try { document.body.removeChild(overlay); } catch (e) { /* already removed */ }
+      document.body.style.overflow = '';
+    });
+  }
+
   paymentModal.classList.add('hidden');
 }
 
 // Fazer polling para verificar status do pagamento
 function startPaymentPolling(paymentId, orderId) {
   let attempts = 0;
-  const maxAttempts = 120; // 10 minutos (cda 5 segundos)
+  const maxAttempts = 120; // 10 minutos (cada 5 segundos)
+  
+  console.log('⏳ Iniciando polling para orderId:', orderId);
+  console.log('   paymentId:', paymentId);
+  console.log('   maxAttempts:', maxAttempts);
+  
   // Executar uma verificação imediata e depois o polling periódico
   async function doCheck() {
     attempts++;
     try {
+      console.log(`\n🔍 [Polling ${attempts}/${maxAttempts}] Verificando status de ${orderId}...`);
+      
       const response = await fetch(`${API_URL}/orders/${orderId}`);
-      if (!response.ok) return;
+      if (!response.ok) {
+        console.warn(`⚠️ Resposta HTTP ${response.status}`);
+        return false;
+      }
 
       const data = await response.json();
       const order = data.order;
+      
+      console.log(`📦 Status atual: status='${order.status}', payment_status='${order.payment_status}'`);
+      
+      // Verificar se modal ainda existe
+      const modal = document.querySelector('[id^="pix-qr-modal-"]');
+      if (!modal) {
+        console.warn('⚠️ Modal PIX não existe mais, parando polling');
+        clearInterval(paymentPollingInterval);
+        return false;
+      }
+      
+      // Atualizar texto de status no modal
+      const statusEl = document.getElementById('pix-status-msg');
+      if (statusEl) {
+        if (order.status === 'confirmed' && order.payment_status === 'approved') {
+          console.log('✅ CONFIRMADO! Atualizando visual...');
+          statusEl.innerHTML = '✅ Pagamento confirmado!';
+          statusEl.style.color = '#10b981';
+          statusEl.style.fontSize = '16px';
+          statusEl.style.fontWeight = '700';
+        } else {
+          statusEl.innerHTML = `⏳ Aguardando pagamento... (${attempts}/${maxAttempts})`;
+        }
+      }
 
       // Se pagamento foi confirmado (webhook atualiza status)
       if (order.status === 'confirmed' && order.payment_status === 'approved') {
+        console.log('✅ Pagamento confirmado via polling!');
         clearInterval(paymentPollingInterval);
         completePixPayment(order);
         return true;
       }
     } catch (error) {
-      console.error('Erro ao verificar pagamento:', error);
+      console.error(`❌ Erro ao verificar pagamento (tentativa ${attempts}):`, error);
     }
 
     // Timeout após 10 minutos
     if (attempts >= maxAttempts) {
+      console.warn('⏱️ Timeout: limite de tentativas atingido');
       clearInterval(paymentPollingInterval);
       pixPaymentTimeout(orderId);
     }
     return false;
   }
 
-  // checagem imediata
+  // Checagem imediata
   doCheck();
 
   paymentPollingInterval = setInterval(() => {
@@ -674,12 +760,42 @@ document.addEventListener('visibilitychange', () => {
 
 // PIX confirmado com sucesso
 function completePixPayment(order) {
+  console.log('✅ Completando pagamento PIX:', order.id);
+  
   const modal = document.querySelector('[id^="pix-qr-modal-"]');
-  if (modal) modal.remove();
-  document.body.style.overflow = 'auto';
-
-  currentOrder = order;
-  showConfirmation(order);
+  if (modal) {
+    // Atualizar visualmente o modal para mostrar confirmação
+    const statusEl = document.getElementById('pix-status-msg');
+    if (statusEl) {
+      statusEl.innerHTML = '✅ Pagamento confirmado!';
+      statusEl.style.color = '#10b981';
+      statusEl.style.fontSize = '16px';
+      statusEl.style.fontWeight = '700';
+    }
+    
+    // Desabilitar botões
+    const copyBtn = document.getElementById('pix-copy');
+    const cancelBtn = document.getElementById('pix-cancel');
+    const waBtn = document.getElementById('pix-whatsapp');
+    const backBtn = document.getElementById('pix-back');
+    
+    if (copyBtn) copyBtn.disabled = true;
+    if (cancelBtn) cancelBtn.disabled = true;
+    if (waBtn) waBtn.disabled = true;
+    if (backBtn) {
+      backBtn.textContent = '✅ Fechar';
+      backBtn.style.backgroundColor = '#10b981';
+    }
+    
+    // Esperar 2 segundos e depois fechar
+    console.log('⏳ Fechando modal em 2 segundos...');
+    setTimeout(() => {
+      try { document.body.removeChild(modal); } catch (e) { /* already removed */ }
+      document.body.style.overflow = 'auto';
+      currentOrder = order;
+      showConfirmation(order);
+    }, 2000);
+  }
 }
 
 // Cancelar pagamento PIX

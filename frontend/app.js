@@ -434,12 +434,16 @@ function displayPixQrModal(pixData, amount, orderId) {
         <button id="pix-copy" style="margin-top: 12px; padding: 10px 20px; background: #3b82f6; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: 600; transition: background 0.2s;" onmouseover="this.style.background='#2563eb'" onmouseout="this.style.background='#3b82f6'">📋 Copiar código</button>
       </div>
     ` : ''}
-    <div style="color: #999; font-size: 14px; margin: 12px 0;">Aguardando confirmação do pagamento...</div>
-    <div style="color: #16a34a; font-size: 14px; margin-top: 20px; font-weight: 600;">✓ Verifique seu app de banco e confirme o pagamento</div>
-    <button id="pix-cancel" style="margin-top: 20px; padding: 12px 30px; background: #dc2626; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 16px; font-weight: bold; transition: background 0.2s;" onmouseover="this.style.background='#b91c1c'" onmouseout="this.style.background='#dc2626'">Cancelar</button>
+    <div id="pix-status-msg" style="color: #999; font-size: 14px; margin: 12px 0;">Aguardando confirmação do pagamento...</div>
+    <div style="display:flex; gap:8px; justify-content:center; align-items:center; margin-top: 12px;">
+      <button id="pix-check" style="padding: 10px 18px; background: #10b981; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: 600;">🔄 Verificar status</button>
+      <button id="pix-cancel" style="padding: 10px 18px; background: #dc2626; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: 600;">Cancelar</button>
+    </div>
   `;
 
   overlay.appendChild(card);
+  // guardar orderId no overlay para verificações externas (visibilitychange)
+  overlay.setAttribute('data-order-id', orderId);
   document.body.appendChild(overlay);
   document.body.style.overflow = 'hidden';
 
@@ -462,6 +466,15 @@ function displayPixQrModal(pixData, amount, orderId) {
   if (cancelBtn) {
     cancelBtn.addEventListener('click', () => {
       cancelPixPayment(orderId);
+    });
+  }
+
+  const checkBtn = document.getElementById('pix-check');
+  if (checkBtn) {
+    checkBtn.addEventListener('click', async () => {
+      const statusEl = document.getElementById('pix-status-msg');
+      if (statusEl) statusEl.textContent = 'Verificando...';
+      await checkOrderStatus(orderId);
     });
   }
 
@@ -501,6 +514,40 @@ function startPaymentPolling(paymentId, orderId) {
     }
   }, 5000); // Verificar a cada 5 segundos
 }
+
+// Verificar status do pedido uma vez (retorno imediato) — usado pelo botão manual e visibilitychange
+async function checkOrderStatus(orderId) {
+  try {
+    const res = await fetch(`${API_URL}/orders/${orderId}`);
+    if (!res.ok) return;
+    const data = await res.json();
+    const order = data.order;
+
+    // Atualizar mensagem de status no modal, se existir
+    const statusEl = document.getElementById('pix-status-msg');
+    if (statusEl) {
+      statusEl.textContent = `Status atual: ${order.status} (${order.payment_status || 'n/a'})`;
+    }
+
+    if (order.status === 'confirmed' && order.payment_status === 'approved') {
+      clearInterval(paymentPollingInterval);
+      completePixPayment(order);
+    }
+  } catch (err) {
+    console.error('Erro em checkOrderStatus:', err);
+  }
+}
+
+// Rechecar automaticamente quando o usuário retornar à aba (caso o webhook tenha sido entregue enquanto a aba estava em segundo plano)
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden) {
+    const modal = document.getElementById('pix-qr-modal');
+    if (modal) {
+      const oid = modal.getAttribute('data-order-id');
+      if (oid) checkOrderStatus(oid);
+    }
+  }
+});
 
 // PIX confirmado com sucesso
 function completePixPayment(order) {

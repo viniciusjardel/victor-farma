@@ -800,12 +800,33 @@ function completePixPayment(order) {
 
 // Cancelar pagamento PIX
 function cancelPixPayment(orderId) {
+  console.log('🔴 Cancelando pedido PIX:', orderId);
+  
   clearInterval(paymentPollingInterval);
   const modal = document.querySelector('[id^="pix-qr-modal-"]');
   if (modal) modal.remove();
   document.body.style.overflow = 'auto';
   paymentModal.classList.add('hidden');
-  alert('Pagamento cancelado');
+  
+  // Chamar backend para cancelar pedido e restaurar estoque
+  try {
+    fetch(`${API_URL}/orders/${orderId}/cancel`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' }
+    })
+      .then(res => res.json())
+      .then(data => {
+        console.log('✅ Pedido cancelado e estoque restaurado:', data);
+        alert('Pagamento cancelado e estoque restaurado');
+      })
+      .catch(err => {
+        console.error('Erro ao cancelar pedido:', err);
+        alert('Pagamento cancelado');
+      });
+  } catch (e) {
+    console.warn('Erro ao chamar API de cancelamento:', e);
+    alert('Pagamento cancelado');
+  }
 }
 
 // Timeout do pagamento

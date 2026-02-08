@@ -35,7 +35,7 @@ module.exports = (pool) => {
         [orderId, userId, customerName, customerPhone, deliveryAddress, total, paymentMethod, 'pending', createdAt]
       );
 
-      // Adicionar itens do pedido
+      // Adicionar itens do pedido (SEM decrementar estoque ainda)
       for (const item of items) {
         const productResult = await pool.query('SELECT price FROM products WHERE id = $1', [item.productId]);
         const price = productResult.rows[0].price;
@@ -46,11 +46,7 @@ module.exports = (pool) => {
           [uuidv4(), orderId, item.productId, item.quantity, price]
         );
 
-        // Atualizar estoque
-        await pool.query(
-          'UPDATE products SET stock = stock - $1 WHERE id = $2',
-          [item.quantity, item.productId]
-        );
+        // ⚠️ NÃO decrementar estoque aqui! Só depois que pagamento for confirmado
       }
 
       // Limpar carrinho
@@ -213,6 +209,27 @@ module.exports = (pool) => {
       const order = updateResult.rows[0];
       console.log(`✅ Webhook PIX: Pedido ${orderId} atualizado para status=${order.status}, payment_status=${order.payment_status}`);
 
+      // 📦 Se pagamento foi aprovado, decrementar estoque
+      if (status === 'approved') {
+        console.log(`📦 Decrementando estoque para pedido ${orderId}...`);
+        
+        const itemsResult = await pool.query(
+          'SELECT product_id, quantity FROM order_items WHERE order_id = $1',
+          [orderId]
+        );
+
+        for (const item of itemsResult.rows) {
+          const updateStockResult = await pool.query(
+            'UPDATE products SET stock = stock - $1 WHERE id = $2 RETURNING stock',
+            [item.quantity, item.product_id]
+          );
+          
+          if (updateStockResult.rows[0]) {
+            console.log(`  ✓ Produto ${item.product_id}: -${item.quantity} unidades (total: ${updateStockResult.rows[0].stock})`);
+          }
+        }
+      }
+
       res.json({ 
         message: 'Webhook processado com sucesso',
         order
@@ -307,6 +324,59 @@ module.exports = (pool) => {
     } catch (error) {
       console.error('❌ Erro no test-webhook:', error);
       res.status(500).json({ error: 'Erro ao processar test-webhook' });
+    }
+  });
+
+  // 🔴 Cancelar pedido e restaurar estoque
+  router.post('/:orderId/cancel', async (req, res) => {
+    try {
+      const { orderId } = req.params;
+
+      // Buscar pedido
+      const orderResult = await pool.query('SELECT * FROM orders WHERE id = $1', [orderId]);
+      if (orderResult.rows.length === 0) {
+        return res.status(404).json({ error: 'Pedido não encontrado' });
+      }
+
+      const order = orderResult.rows[0];
+
+      // Se já foi confirmado e o estoque foi decrementado, restaurar
+      if (order.status === 'confirmed' || order.payment_status === 'approved') {
+        console.log(`🔴 Cancelando pedido ${orderId} e restaurando estoque...`);
+        
+        const itemsResult = await pool.query(
+          'SELECT product_id, quantity FROM order_items WHERE order_id = $1',
+          [orderId]
+        );
+
+        for (const item of itemsResult.rows) {
+          const restoreResult = await pool.query(
+            'UPDATE products SET stock = stock + $1 WHERE id = $2 RETURNING stock',
+            [item.quantity, item.product_id]
+          );
+          
+          if (restoreResult.rows[0]) {
+            console.log(`  ✓ Produto ${item.product_id}: +${item.quantity} unidades restauradas (total: ${restoreResult.rows[0].stock})`);
+          }
+        }
+      }
+
+      // Atualizar status do pedido para "cancelled"
+      const cancelResult = await pool.query(
+        'UPDATE orders SET status = $1, payment_status = $2 WHERE id = $3 RETURNING *',
+        ['cancelled', 'cancelled', orderId]
+      );
+
+      console.log(`✅ Pedido ${orderId} cancelado`);
+
+      res.json({
+        message: 'Pedido cancelado com sucesso',
+        order: cancelResult.rows[0]
+      });
+
+    } catch (error) {
+      console.error('❌ Erro ao cancelar pedido:', error);
+      res.status(500).json({ error: 'Erro ao cancelar pedido' });
     }
   });
 

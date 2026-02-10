@@ -1219,7 +1219,7 @@ function completePixPayment(order) {
             dateTimeStr = ` ${dd}/${MM}/${yyyy} - ${hh}:${min}:${ss}`;
           }
         } catch (e) { /* ignore */ }
-        const texto = `✅ Pagamento Confirmado!\\n\\nPedido: ${order.id}\\nTotal: R$ ${order.total.toFixed(2)}${dateTimeStr}\\n\\nChave PIX: ${brcode}`;
+        const texto = `✅ Pagamento Confirmado!\\n\\nPedido: ${order.id}\\nTotal: R$ ${parseFloat(order.total).toFixed(2)}${dateTimeStr}\\n\\nChave PIX: ${brcode}`;
         const url = `https://wa.me/5581987508211?text=${encodeURIComponent(texto)}`;
         window.open(url, '_blank');
       });
@@ -1347,13 +1347,13 @@ function showConfirmation(order) {
       let texto;
       if (order.payment_method === 'credit_card') {
         // Mensagem para pagamento em cartão
-        texto = `✅ Pedido Realizado!\\n\\nPedido: ${order.id}\\nTotal: R$ ${order.total.toFixed(2)}${dateTimeStr}\\n\\nAtençao: Pagamento com cartão será coletado na entrega.\\n\\nOlá, segue meu pedido para entrega. Aguardo!`;
+        texto = `✅ Pedido Realizado!\\n\\nPedido: ${order.id}\\nTotal: R$ ${parseFloat(order.total).toFixed(2)}${dateTimeStr}\\n\\nAtençao: Pagamento com cartão será coletado na entrega.\\n\\nOlá, segue meu pedido para entrega. Aguardo!`;
       } else if (order.payment_method === 'pix') {
         // Mensagem para PIX
-        texto = `✅ Pagamento Confirmado!\\n\\nPedido: ${order.id}\\nTotal: R$ ${order.total.toFixed(2)}${dateTimeStr}\\n\\nOlá, segue meu pedido confirmado e pago. Aguardo a entrega!`;
+        texto = `✅ Pagamento Confirmado!\\n\\nPedido: ${order.id}\\nTotal: R$ ${parseFloat(order.total).toFixed(2)}${dateTimeStr}\\n\\nOlá, segue meu pedido confirmado e pago. Aguardo a entrega!`;
       } else {
         // Mensagem genérica
-        texto = `✅ Pedido Realizado!\\n\\nPedido: ${order.id}\\nTotal: R$ ${order.total.toFixed(2)}${dateTimeStr}\\n\\nOlá, segue meu pedido. Aguardo a entrega!`;
+        texto = `✅ Pedido Realizado!\\n\\nPedido: ${order.id}\\nTotal: R$ ${parseFloat(order.total).toFixed(2)}${dateTimeStr}\\n\\nOlá, segue meu pedido. Aguardo a entrega!`;
       }
       
       const url = `https://wa.me/5581987508211?text=${encodeURIComponent(texto)}`;

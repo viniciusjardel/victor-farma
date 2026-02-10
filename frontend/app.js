@@ -71,7 +71,18 @@ checkoutBtn.addEventListener('click', () => {
   checkoutModal.classList.remove('hidden');
 });
 
-checkoutForm.addEventListener('submit', handleCheckout);
+checkoutForm.addEventListener('submit', handleCheckoutFormSubmit);
+
+// Elementos para modal de forma de pagamento
+const paymentMethodModal = document.getElementById('payment-method-modal');
+const cardPaymentBtn = document.getElementById('card-payment-btn');
+const pixPaymentBtn = document.getElementById('pix-payment-btn');
+
+let checkoutData = null; // Guardar dados do checkout
+
+// Event listeners para escolha de pagamento
+if (cardPaymentBtn) cardPaymentBtn.addEventListener('click', handleCreditCardPayment);
+if (pixPaymentBtn) pixPaymentBtn.addEventListener('click', handlePixMethodPayment);
 
 document.getElementById('back-to-products-btn').addEventListener('click', () => {
   confirmationModal.classList.add('hidden');
@@ -567,8 +578,8 @@ async function removeFromCart(itemId) {
   }
 }
 
-// Processar checkout
-async function handleCheckout(e) {
+// Processar submissão do formulário de checkout
+async function handleCheckoutFormSubmit(e) {
   e.preventDefault();
 
   const customerName = document.getElementById('customer-name').value;
@@ -580,34 +591,121 @@ async function handleCheckout(e) {
     quantity: item.quantity
   }));
 
+  // Guardar dados para uso posterior
+  checkoutData = {
+    customerName,
+    customerPhone,
+    deliveryAddress,
+    items
+  };
+
+  // Mostrar modal de escolha de pagamento
+  checkoutModal.classList.add('hidden');
+  paymentMethodModal.classList.remove('hidden');
+}
+
+// Processar checkout com Cartão de Crédito/Débito
+async function handleCreditCardPayment() {
+  console.log('💳 Selecionado: Cartão de Crédito/Débito');
+  
+  if (!checkoutData) return;
+
   try {
+    paymentMethodModal.classList.add('hidden');
+    
+    // Mostrar loading
+    const loadingDiv = document.createElement('div');
+    loadingDiv.id = 'card-loading';
+    loadingDiv.className = 'fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-white p-10 rounded-lg shadow-md z-50';
+    loadingDiv.innerHTML = '<p class="text-lg font-semibold text-gray-800">Processando pedido...</p>';
+    document.body.appendChild(loadingDiv);
+
     const response = await fetch(`${API_URL}/orders`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         userId,
-        items,
-        customerName,
-        customerPhone,
-        deliveryAddress,
-        paymentMethod: 'pix'
+        items: checkoutData.items,
+        customerName: checkoutData.customerName,
+        customerPhone: checkoutData.customerPhone,
+        deliveryAddress: checkoutData.deliveryAddress,
+        paymentMethod: 'credit_card'
       })
     });
+
+    loadingDiv.remove();
 
     if (!response.ok) {
       const error = await response.json();
       notify.error(error.error || 'Erro ao criar pedido');
+      paymentMethodModal.classList.remove('hidden');
       return;
     }
 
     const data = await response.json();
     currentOrder = data.order;
 
+    console.log('✅ Pedido criado com sucesso:', currentOrder);
+    notify.success('Pedido criado com sucesso!');
+    
+    // Mostrar confirmação (sem PIX)
+    showConfirmation(currentOrder);
+  } catch (error) {
+    console.error('❌ Erro ao processar pagamento com cartão:', error);
+    notify.error('Erro ao processar pedido');
+    paymentMethodModal.classList.remove('hidden');
+  }
+}
+
+// Processar checkout com PIX
+async function handlePixMethodPayment() {
+  console.log('📲 Selecionado: PIX');
+  
+  if (!checkoutData) return;
+
+  try {
+    paymentMethodModal.classList.add('hidden');
+    
+    // Mostrar loading
+    const loadingDiv = document.createElement('div');
+    loadingDiv.id = 'pix-method-loading';
+    loadingDiv.className = 'fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-white p-10 rounded-lg shadow-md z-50';
+    loadingDiv.innerHTML = '<p class="text-lg font-semibold text-gray-800">Criando pedido...</p>';
+    document.body.appendChild(loadingDiv);
+
+    const response = await fetch(`${API_URL}/orders`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        userId,
+        items: checkoutData.items,
+        customerName: checkoutData.customerName,
+        customerPhone: checkoutData.customerPhone,
+        deliveryAddress: checkoutData.deliveryAddress,
+        paymentMethod: 'pix'
+      })
+    });
+
+    if (!response.ok) {
+      loadingDiv.remove();
+      const error = await response.json();
+      notify.error(error.error || 'Erro ao criar pedido');
+      paymentMethodModal.classList.remove('hidden');
+      return;
+    }
+
+    const data = await response.json();
+    currentOrder = data.order;
+    loadingDiv.remove();
+
+    console.log('✅ Pedido PIX criado:', currentOrder);
+
     // Gerar PIX real do Mercado Pago
     generatePixPayment(data.order.id, data.order.total);
   } catch (error) {
-    console.error('Erro:', error);
+    console.error('❌ Erro ao processar PIX:', error);
     notify.error('Erro ao processar pedido');
+    paymentMethodModal.classList.remove('hidden');
   }
 }
 
@@ -1177,7 +1275,7 @@ function showConfirmation(order) {
   confirmationModal.classList.remove('hidden');
   notify.success(`Pedido #${order.id} confirmado! Aguarde atualizações por WhatsApp.`, 4000);
 
-  // Ligar botão WhatsApp no modal de confirmação (inclui hora:minute)
+  // Ligar botão WhatsApp no modal de confirmação (adaptar mensagem conforme forma de pagamento)
   const whatsappConfirmBtn = document.getElementById('confirmation-whatsapp-btn');
   if (whatsappConfirmBtn) {
     whatsappConfirmBtn.addEventListener('click', () => {
@@ -1192,7 +1290,20 @@ function showConfirmation(order) {
         const min = String(d.getMinutes()).padStart(2, '0');
         dateTimeStr = ` ${dd}/${MM}/${yyyy} - ${hh}:${min}`;
       }
-      const texto = `✅ Pagamento Confirmado!\\n\\nPedido: ${order.id}\\nTotal: R$ ${order.total.toFixed(2)}${dateTimeStr}\\n\\nOlá, segue meu pedido confirmado e pago. Aguardo a entrega!`;
+      
+      // Adaptar mensagem conforme forma de pagamento
+      let texto;
+      if (order.payment_method === 'credit_card') {
+        // Mensagem para pagamento em cartão
+        texto = `✅ Pedido Realizado!\\n\\nPedido: ${order.id}\\nTotal: R$ ${order.total.toFixed(2)}${dateTimeStr}\\n\\nAtençao: Pagamento com cartão será coletado na entrega.\\n\\nOlá, segue meu pedido para entrega. Aguardo!`;
+      } else if (order.payment_method === 'pix') {
+        // Mensagem para PIX
+        texto = `✅ Pagamento Confirmado!\\n\\nPedido: ${order.id}\\nTotal: R$ ${order.total.toFixed(2)}${dateTimeStr}\\n\\nOlá, segue meu pedido confirmado e pago. Aguardo a entrega!`;
+      } else {
+        // Mensagem genérica
+        texto = `✅ Pedido Realizado!\\n\\nPedido: ${order.id}\\nTotal: R$ ${order.total.toFixed(2)}${dateTimeStr}\\n\\nOlá, segue meu pedido. Aguardo a entrega!`;
+      }
+      
       const url = `https://wa.me/5581987508211?text=${encodeURIComponent(texto)}`;
       window.open(url, '_blank');
     }, { once: true }); // Executar apenas uma vez

@@ -113,7 +113,7 @@
           <textarea id="delivery-address" required rows="3" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 text-sm"></textarea>
         </div>
         <button type="submit" class="w-full bg-red-600 hover:bg-red-700 btn-hover text-white font-bold py-2 rounded-lg text-sm md:text-base">
-          💳 Pagar
+          Próximo (Escolher Pagamento)
         </button>
       </form>
     </div>
@@ -144,6 +144,39 @@
 
   <!-- Modal PIX (created via JS) -->
   <div id="payment-modal"></div>
+
+  <!-- Modal Escolha de Forma de Pagamento -->
+  <div id="payment-method-modal" class="modal hidden fixed inset-0 bg-black bg-opacity-50 flex items-end md:items-center justify-center z-50 p-4">
+    <div class="bg-white rounded-t-lg md:rounded-lg shadow-xl w-full md:max-w-md">
+      <div class="sticky top-0 bg-gradient-to-r from-blue-700 to-blue-600 text-white p-4 flex justify-between items-center">
+        <h2 class="text-lg md:text-xl font-bold">💳 Forma de Pagamento</h2>
+        <button class="close-modal text-2xl font-bold">×</button>
+      </div>
+      <div class="p-6 space-y-4">
+        <!-- Opção Cartão -->
+        <button id="card-payment-btn" class="w-full p-4 border-2 border-gray-300 hover:border-blue-500 hover:bg-blue-50 rounded-lg transition-all text-left">
+          <div class="flex items-center gap-3">
+            <div class="text-3xl">💳</div>
+            <div>
+              <p class="font-bold text-gray-900">Cartão de Crédito/Débito</p>
+              <p class="text-xs text-gray-600">Presencial na entrega</p>
+            </div>
+          </div>
+        </button>
+        
+        <!-- Opção PIX -->
+        <button id="pix-payment-btn" class="w-full p-4 border-2 border-gray-300 hover:border-green-500 hover:bg-green-50 rounded-lg transition-all text-left">
+          <div class="flex items-center gap-3">
+            <div class="text-3xl">📲</div>
+            <div>
+              <p class="font-bold text-gray-900">PIX Instantâneo</p>
+              <p class="text-xs text-gray-600">QR Code para escanear</p>
+            </div>
+          </div>
+        </button>
+      </div>
+    </div>
+  </div>
 
   <!-- Modal Meus Pedidos -->
   <div id="orders-modal" class="modal hidden fixed inset-0 bg-black bg-opacity-50 flex items-end md:items-center justify-center z-50 p-4">

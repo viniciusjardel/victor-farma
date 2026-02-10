@@ -542,7 +542,12 @@ async function openOrderModal(orderId) {
 }
 
 async function updateOrderStatus(orderId) {
-  const newStatus = document.getElementById('new-status').value;
+  const statusSelect = document.getElementById('status-select') || document.getElementById('new-status');
+  if (!statusSelect) {
+    showAdminToast('Elemento de seleção de status não encontrado', 'error');
+    return;
+  }
+  const newStatus = statusSelect.value;
 
   try {
     const response = await fetch(`${API_URL}/orders/${orderId}/status`, {
@@ -552,15 +557,29 @@ async function updateOrderStatus(orderId) {
     });
 
     if (!response.ok) {
-      showAdminToast('Erro ao atualizar status', 'error');
+      let errMsg = 'Erro ao atualizar status';
+      try { const err = await response.json(); errMsg = err.error || err.message || errMsg; } catch(e){}
+      showAdminToast(errMsg, 'error');
       return;
     }
 
-    orderModal.classList.add('hidden');
-    loadOrders();
-    showAdminToast('Status atualizado com sucesso!', 'success');
+    const updatedOrder = await response.json();
+
+    const index = allOrders.findIndex(o => o.id === orderId);
+    if (index !== -1) allOrders[index] = updatedOrder;
+
+    showAdminToast(`✅ Pedido atualizado para ${getStatusLabel(newStatus)}`);
+
+    // Fechar modais correspondentes
+    const floatingModal = document.querySelector('.fixed.inset-0.bg-black');
+    if (floatingModal) floatingModal.remove();
+    if (orderModal && !orderModal.classList.contains('hidden')) orderModal.classList.add('hidden');
+
+    // Recarregar receita e lista
+    loadTotalRevenue();
+    filterOrders();
   } catch (error) {
-    console.error('Erro:', error);
+    console.error('Erro ao atualizar status:', error);
     showAdminToast('Erro ao atualizar status', 'error');
   }
 }

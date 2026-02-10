@@ -252,13 +252,48 @@ module.exports = (pool) => {
         return res.status(400).json({ error: 'Status inválido' });
       }
 
+      // Buscar pedido atual para saber o status anterior
+      const currentOrderResult = await pool.query(
+        'SELECT * FROM orders WHERE id = $1',
+        [orderId]
+      );
+
+      if (currentOrderResult.rows.length === 0) {
+        return res.status(404).json({ error: 'Pedido não encontrado' });
+      }
+
+      const currentOrderStatus = currentOrderResult.rows[0].status;
+      const orderTotal = currentOrderResult.rows[0].total;
+
+      // Atualizar status do pedido
       const result = await pool.query(
-        'UPDATE orders SET status = $1 WHERE id = $2 RETURNING *',
+        'UPDATE orders SET status = $1, updated_at = NOW() WHERE id = $2 RETURNING *',
         [status, orderId]
       );
 
-      if (result.rows.length === 0) {
-        return res.status(404).json({ error: 'Pedido não encontrado' });
+      // Se mudou para 'confirmed' ou 'delivered' (e não era antes), adicionar à receita
+      if ((status === 'confirmed' || status === 'delivered') && 
+          (currentOrderStatus !== 'confirmed' && currentOrderStatus !== 'delivered')) {
+        
+        try {
+          // Verificar se já existe receita para este pedido
+          const existingRevenue = await pool.query(
+            'SELECT id FROM revenue WHERE order_id = $1',
+            [orderId]
+          );
+
+          // Apenas adicionar se não existir
+          if (existingRevenue.rows.length === 0) {
+            await pool.query(
+              'INSERT INTO revenue (id, order_id, amount, status, created_at) VALUES ($1, $2, $3, $4, NOW())',
+              [uuidv4(), orderId, orderTotal, status]
+            );
+            console.log(`✅ Receita adicionada para pedido ${orderId}: R$ ${orderTotal}`);
+          }
+        } catch (revenueError) {
+          console.error('⚠️ Erro ao adicionar receita:', revenueError);
+          // Não bloqueia a atualização de status se houver erro na receita
+        }
       }
 
       res.json(result.rows[0]);
@@ -377,6 +412,97 @@ module.exports = (pool) => {
     } catch (error) {
       console.error('❌ Erro ao cancelar pedido:', error);
       res.status(500).json({ error: 'Erro ao cancelar pedido' });
+    }
+  });
+
+  // Obter receita total
+  router.get('/admin/revenue/total', async (req, res) => {
+    try {
+      const result = await pool.query(
+        'SELECT COALESCE(SUM(amount), 0) as total_revenue, COUNT(*) as transaction_count FROM revenue'
+      );
+      
+      const totalRevenue = parseFloat(result.rows[0].total_revenue);
+      const transactionCount = result.rows[0].transaction_count;
+
+      res.json({
+        total_revenue: totalRevenue,
+        transaction_count: transactionCount,
+        formatted: `R$ ${totalRevenue.toFixed(2)}`
+      });
+    } catch (error) {
+      console.error('Erro ao buscar receita total:', error);
+      res.status(500).json({ error: 'Erro ao buscar receita total' });
+    }
+  });
+
+  // Obter receita por período
+  router.get('/admin/revenue/period', async (req, res) => {
+    try {
+      const { start_date, end_date } = req.query;
+      
+      let query = 'SELECT COALESCE(SUM(amount), 0) as total_revenue, COUNT(*) as transaction_count FROM revenue WHERE 1=1';
+      const params = [];
+      let paramCount = 1;
+
+      if (start_date) {
+        query += ` AND created_at >= $${paramCount}`;
+        params.push(new Date(start_date));
+        paramCount++;
+      }
+
+      if (end_date) {
+        query += ` AND created_at <= $${paramCount}`;
+        params.push(new Date(end_date));
+        paramCount++;
+      }
+
+      const result = await pool.query(query, params);
+      
+      const totalRevenue = parseFloat(result.rows[0].total_revenue);
+      const transactionCount = result.rows[0].transaction_count;
+
+      res.json({
+        total_revenue: totalRevenue,
+        transaction_count: transactionCount,
+        formatted: `R$ ${totalRevenue.toFixed(2)}`,
+        period: { start_date, end_date }
+      });
+    } catch (error) {
+      console.error('Erro ao buscar receita por período:', error);
+      res.status(500).json({ error: 'Erro ao buscar receita por período' });
+    }
+  });
+
+  // Obter histórico detalhado de receita
+  router.get('/admin/revenue/history', async (req, res) => {
+    try {
+      const result = await pool.query(
+        `SELECT 
+          r.id,
+          r.order_id,
+          r.amount,
+          r.status,
+          r.created_at,
+          o.customer_name,
+          o.payment_method
+        FROM revenue r
+        JOIN orders o ON r.order_id = o.id
+        ORDER BY r.created_at DESC
+        LIMIT 100`
+      );
+
+      const totalRevenue = result.rows.reduce((sum, row) => sum + parseFloat(row.amount), 0);
+
+      res.json({
+        history: result.rows,
+        total_revenue: totalRevenue,
+        transaction_count: result.rows.length,
+        formatted: `R$ ${totalRevenue.toFixed(2)}`
+      });
+    } catch (error) {
+      console.error('Erro ao buscar histórico de receita:', error);
+      res.status(500).json({ error: 'Erro ao buscar histórico de receita' });
     }
   });
 

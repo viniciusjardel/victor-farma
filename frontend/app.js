@@ -77,12 +77,25 @@ checkoutForm.addEventListener('submit', handleCheckoutFormSubmit);
 const paymentMethodModal = document.getElementById('payment-method-modal');
 const cardPaymentBtn = document.getElementById('card-payment-btn');
 const pixPaymentBtn = document.getElementById('pix-payment-btn');
+const paymentConfirmationModal = document.getElementById('payment-confirmation-modal');
+const confirmPaymentBtn = document.getElementById('confirm-payment-btn');
+const cancelPaymentBtn = document.getElementById('cancel-payment-btn');
+const paymentMethodNameSpan = document.getElementById('payment-method-name');
 
 let checkoutData = null; // Guardar dados do checkout
+let pendingPaymentMethod = null; // Armazenar método de pagamento pendente
 
 // Event listeners para escolha de pagamento
 if (cardPaymentBtn) cardPaymentBtn.addEventListener('click', handleCreditCardPayment);
 if (pixPaymentBtn) pixPaymentBtn.addEventListener('click', handlePixMethodPayment);
+
+// Event listeners para confirmação de pagamento
+if (confirmPaymentBtn) confirmPaymentBtn.addEventListener('click', processConfirmedPayment);
+if (cancelPaymentBtn) cancelPaymentBtn.addEventListener('click', () => {
+  paymentConfirmationModal.classList.add('hidden');
+  paymentMethodModal.classList.remove('hidden');
+  pendingPaymentMethod = null;
+});
 
 document.getElementById('back-to-products-btn').addEventListener('click', () => {
   confirmationModal.classList.add('hidden');
@@ -180,7 +193,8 @@ function renderOrdersList() {
     const yyyy = created.getFullYear();
     const hh = String(created.getHours()).padStart(2,'0');
     const min = String(created.getMinutes()).padStart(2,'0');
-    const dateTimeStr = `${dd}/${MM}/${yyyy} - ${hh}:${min}`;
+    const ss = String(created.getSeconds()).padStart(2,'0');
+    const dateTimeStr = `${dd}/${MM}/${yyyy} - ${hh}:${min}:${ss}`;
 
     const label = statusLabel(order.status);
     const statusBadge = `<span class="text-xs font-semibold px-2 py-1 rounded-full" style="background:${statusColor(order.status)}; color:white">${label}</span>`;
@@ -232,7 +246,8 @@ function renderOrdersList() {
           const yyyy = created.getFullYear();
           const hh = String(created.getHours()).padStart(2,'0');
           const min = String(created.getMinutes()).padStart(2,'0');
-          dtEl.textContent = `${dd}/${MM}/${yyyy} - ${hh}:${min}`;
+          const ss = String(created.getSeconds()).padStart(2,'0');
+          dtEl.textContent = `${dd}/${MM}/${yyyy} - ${hh}:${min}:${ss}`;
         }
         confirmationModal.classList.remove('hidden');
         ordersModal.classList.add('hidden');
@@ -610,9 +625,42 @@ async function handleCreditCardPayment() {
   
   if (!checkoutData) return;
 
+  // Fechar modal de escolha e mostrar modal de confirmação
+  paymentMethodModal.classList.add('hidden');
+  paymentMethodNameSpan.textContent = 'Cartão de Crédito/Débito';
+  paymentConfirmationModal.classList.remove('hidden');
+  pendingPaymentMethod = 'credit_card';
+}
+
+// Processar checkout com PIX
+async function handlePixMethodPayment() {
+  console.log('📲 Selecionado: PIX');
+  
+  if (!checkoutData) return;
+
+  // Fechar modal de escolha e mostrar modal de confirmação
+  paymentMethodModal.classList.add('hidden');
+  paymentMethodNameSpan.textContent = 'PIX Instantâneo';
+  paymentConfirmationModal.classList.remove('hidden');
+  pendingPaymentMethod = 'pix';
+}
+
+// Processar pagamento confirmado
+async function processConfirmedPayment() {
+  console.log(`✅ Pagamento confirmado com método: ${pendingPaymentMethod}`);
+  
+  paymentConfirmationModal.classList.add('hidden');
+  
+  if (pendingPaymentMethod === 'credit_card') {
+    await processCardPayment();
+  } else if (pendingPaymentMethod === 'pix') {
+    await processPixPayment();
+  }
+}
+
+// Processar pagamento com cartão (após confirmação)
+async function processCardPayment() {
   try {
-    paymentMethodModal.classList.add('hidden');
-    
     // Mostrar loading
     const loadingDiv = document.createElement('div');
     loadingDiv.id = 'card-loading';
@@ -639,6 +687,7 @@ async function handleCreditCardPayment() {
       const error = await response.json();
       notify.error(error.error || 'Erro ao criar pedido');
       paymentMethodModal.classList.remove('hidden');
+      pendingPaymentMethod = null;
       return;
     }
 
@@ -647,6 +696,7 @@ async function handleCreditCardPayment() {
 
     console.log('✅ Pedido criado com sucesso:', currentOrder);
     notify.success('Pedido criado com sucesso!');
+    paymentMethodModal.classList.add('hidden');
     
     // Mostrar confirmação (sem PIX)
     showConfirmation(currentOrder);
@@ -654,18 +704,13 @@ async function handleCreditCardPayment() {
     console.error('❌ Erro ao processar pagamento com cartão:', error);
     notify.error('Erro ao processar pedido');
     paymentMethodModal.classList.remove('hidden');
+    pendingPaymentMethod = null;
   }
 }
 
-// Processar checkout com PIX
-async function handlePixMethodPayment() {
-  console.log('📲 Selecionado: PIX');
-  
-  if (!checkoutData) return;
-
+// Processar pagamento com PIX (após confirmação)
+async function processPixPayment() {
   try {
-    paymentMethodModal.classList.add('hidden');
-    
     // Mostrar loading
     const loadingDiv = document.createElement('div');
     loadingDiv.id = 'pix-method-loading';
@@ -691,6 +736,7 @@ async function handlePixMethodPayment() {
       const error = await response.json();
       notify.error(error.error || 'Erro ao criar pedido');
       paymentMethodModal.classList.remove('hidden');
+      pendingPaymentMethod = null;
       return;
     }
 
@@ -699,6 +745,7 @@ async function handlePixMethodPayment() {
     loadingDiv.remove();
 
     console.log('✅ Pedido PIX criado:', currentOrder);
+    paymentMethodModal.classList.add('hidden');
 
     // Gerar PIX real do Mercado Pago
     generatePixPayment(data.order.id, data.order.total);
@@ -706,8 +753,10 @@ async function handlePixMethodPayment() {
     console.error('❌ Erro ao processar PIX:', error);
     notify.error('Erro ao processar pedido');
     paymentMethodModal.classList.remove('hidden');
+    pendingPaymentMethod = null;
   }
 }
+
 
 // Exibir modal de pagamento
 function displayPaymentModal(pixQRCode, amount, orderId) {
@@ -1166,7 +1215,8 @@ function completePixPayment(order) {
             const yyyy = d.getFullYear();
             const hh = String(d.getHours()).padStart(2, '0');
             const min = String(d.getMinutes()).padStart(2, '0');
-            dateTimeStr = ` ${dd}/${MM}/${yyyy} - ${hh}:${min}`;
+            const ss = String(d.getSeconds()).padStart(2, '0');
+            dateTimeStr = ` ${dd}/${MM}/${yyyy} - ${hh}:${min}:${ss}`;
           }
         } catch (e) { /* ignore */ }
         const texto = `✅ Pagamento Confirmado!\\n\\nPedido: ${order.id}\\nTotal: R$ ${order.total.toFixed(2)}${dateTimeStr}\\n\\nChave PIX: ${brcode}`;
@@ -1264,7 +1314,8 @@ function showConfirmation(order) {
       const yyyy = d.getFullYear();
       const hh = String(d.getHours()).padStart(2, '0');
       const min = String(d.getMinutes()).padStart(2, '0');
-      const dateTimeStr = `${dd}/${MM}/${yyyy} - ${hh}:${min}`;
+      const ss = String(d.getSeconds()).padStart(2, '0');
+      const dateTimeStr = `${dd}/${MM}/${yyyy} - ${hh}:${min}:${ss}`;
       const dtEl = document.getElementById('order-datetime-display');
       if (dtEl) dtEl.textContent = dateTimeStr;
     }
@@ -1288,7 +1339,8 @@ function showConfirmation(order) {
         const yyyy = d.getFullYear();
         const hh = String(d.getHours()).padStart(2, '0');
         const min = String(d.getMinutes()).padStart(2, '0');
-        dateTimeStr = ` ${dd}/${MM}/${yyyy} - ${hh}:${min}`;
+        const ss = String(d.getSeconds()).padStart(2, '0');
+        dateTimeStr = ` ${dd}/${MM}/${yyyy} - ${hh}:${min}:${ss}`;
       }
       
       // Adaptar mensagem conforme forma de pagamento

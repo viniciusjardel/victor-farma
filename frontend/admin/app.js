@@ -162,7 +162,6 @@ async function loadDashboard() {
     const data = await response.json();
 
     document.getElementById('total-orders').textContent = data.totalOrders;
-    document.getElementById('total-revenue').textContent = `R$ ${parseFloat(data.totalRevenue).toFixed(2)}`;
     document.getElementById('total-products').textContent = data.totalProducts;
 
     const lowStockList = document.getElementById('low-stock-list');
@@ -176,6 +175,9 @@ async function loadDashboard() {
         </div>
       `).join('');
     }
+
+    // Carregar receita total
+    loadTotalRevenue();
   } catch (error) {
     console.error('Erro ao carregar dashboard:', error);
   }
@@ -621,3 +623,111 @@ function displayTopProducts(topProducts) {
     </div>
   `).join('');
 }
+
+// ==================== FUNÇÕES DE RECEITA ====================
+
+async function loadTotalRevenue() {
+  try {
+    const response = await fetch(`${API_URL}/orders/admin/revenue/total`);
+    if (!response.ok) {
+      console.error('Erro ao buscar receita total:', response.status);
+      return;
+    }
+    const data = await response.json();
+    
+    const revenueEl = document.getElementById('total-revenue');
+    if (revenueEl) {
+      revenueEl.innerHTML = `
+        <div class="bg-white rounded-lg shadow-md p-6 border-l-4 border-green-600">
+          <h3 class="text-lg font-semibold text-gray-700 mb-2">💰 Receita Total</h3>
+          <div class="text-4xl font-bold text-green-600 mb-1">${data.formatted}</div>
+          <div class="text-sm text-gray-500">${data.transaction_count} transações</div>
+        </div>
+      `;
+    }
+  } catch (error) {
+    console.error('Erro ao carregar receita total:', error);
+  }
+}
+
+// ==================== FUNÇÕES DE STATUS ====================
+
+function openStatusModal(orderId) {
+  const order = allOrders.find(o => o.id === orderId);
+  if (!order) {
+    showAdminToast('Pedido não encontrado', 'error');
+    return;
+  }
+
+  // Criar modal de status
+  const modal = document.createElement('div');
+  modal.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50';
+  modal.innerHTML = `
+    <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-md">
+      <h2 class="text-xl font-bold text-gray-900 mb-4">Atualizar Status do Pedido</h2>
+      <p class="text-sm text-gray-600 mb-4">Pedido #${order.id}</p>
+      
+      <div class="space-y-2 mb-6">
+        <select id="status-select" class="w-full border border-gray-300 rounded-lg p-2 focus:outline-none focus:ring-2 focus:ring-green-500">
+          <option value="pending" ${order.status === 'pending' ? 'selected' : ''}>Pendente</option>
+          <option value="confirmed" ${order.status === 'confirmed' ? 'selected' : ''}>Confirmado</option>
+          <option value="preparing" ${order.status === 'preparing' ? 'selected' : ''}>Preparando</option>
+          <option value="out_for_delivery" ${order.status === 'out_for_delivery' ? 'selected' : ''}>Saindo para entrega</option>
+          <option value="delivered" ${order.status === 'delivered' ? 'selected' : ''}>Entregue</option>
+          <option value="cancelled" ${order.status === 'cancelled' ? 'selected' : ''}>Cancelado</option>
+        </select>
+      </div>
+
+      <div class="flex gap-2">
+        <button onclick="this.closest('.fixed').remove()" class="flex-1 bg-gray-400 hover:bg-gray-500 text-white font-bold py-2 rounded-lg transition-colors">
+          Cancelar
+        </button>
+        <button onclick="updateOrderStatus('${orderId}')" class="flex-1 bg-green-600 hover:bg-green-700 text-white font-bold py-2 rounded-lg transition-colors">
+          Atualizar
+        </button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(modal);
+  document.getElementById('status-select').focus();
+}
+
+async function updateOrderStatus(orderId) {
+  const statusSelect = document.getElementById('status-select');
+  const newStatus = statusSelect.value;
+
+  try {
+    const response = await fetch(`${API_URL}/orders/${orderId}/status`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: newStatus })
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      showAdminToast(`Erro ao atualizar status: ${error.error}`, 'error');
+      return;
+    }
+
+    const updatedOrder = await response.json();
+    
+    // Atualizar no array de pedidos
+    const index = allOrders.findIndex(o => o.id === orderId);
+    if (index !== -1) {
+      allOrders[index] = updatedOrder;
+    }
+
+    showAdminToast(`✅ Pedido atualizado para ${getStatusLabel(newStatus)}`);
+    
+    // Fechar modal
+    document.querySelector('.fixed.inset-0.bg-black').remove();
+    
+    // Recarregar receita e pedidos
+    loadTotalRevenue();
+    filterOrders();
+  } catch (error) {
+    console.error('Erro ao atualizar status:', error);
+    showAdminToast('Erro ao atualizar status', 'error');
+  }
+}
+

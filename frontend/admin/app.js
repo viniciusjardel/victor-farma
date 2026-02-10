@@ -731,3 +731,53 @@ async function updateOrderStatus(orderId) {
   }
 }
 
+// ⚠️ TEMPORÁRIO: Função para deletar todos os pedidos (apenas para desenvolvimento)
+async function deleteAllOrders() {
+  const confirmDelete = confirm(
+    '⚠️ ATENÇÃO!\n\n' +
+    'Esta ação irá DELETAR TODOS os pedidos, incluindo a receita.\n\n' +
+    'Esta é uma ação permanente e não pode ser desfeita.\n\n' +
+    'Tem certeza que deseja continuar?'
+  );
+
+  if (!confirmDelete) {
+    showAdminToast('Operação cancelada', 'error');
+    return;
+  }
+
+  // Segunda confirmação de segurança
+  const doubleConfirm = confirm(
+    'Última confirmação: Você realmente deseja deletar TODOS os pedidos?'
+  );
+
+  if (!doubleConfirm) {
+    showAdminToast('Operação cancelada', 'error');
+    return;
+  }
+
+  try {
+    const response = await fetch(`${API_URL}/orders/admin/all`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ confirm: true })
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      showAdminToast(`Erro ao deletar pedidos: ${error.error}`, 'error');
+      return;
+    }
+
+    const result = await response.json();
+    showAdminToast(`✅ ${result.message}`);
+    
+    // Recarregar tudo
+    allOrders = [];
+    loadTotalRevenue();
+    filterOrders();
+  } catch (error) {
+    console.error('Erro ao deletar todos os pedidos:', error);
+    showAdminToast('Erro ao deletar pedidos', 'error');
+  }
+}
+

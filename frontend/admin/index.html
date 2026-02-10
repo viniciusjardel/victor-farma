@@ -121,7 +121,7 @@
         <section id="orders-section" class="section hidden">
           <h3 class="text-2xl font-bold text-gray-800 mb-6">Gerenciamento de Pedidos</h3>
 
-          <div class="mb-6">
+          <div class="mb-6 flex justify-between items-center gap-4">
             <select id="order-status-filter" class="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500">
               <option value="">Todos os status</option>
               <option value="pending">Pendente</option>
@@ -131,6 +131,11 @@
               <option value="delivered">Entregue</option>
               <option value="cancelled">Cancelado</option>
             </select>
+            
+            <!-- Botão temporário para deletar todos os pedidos -->
+            <button onclick="deleteAllOrders()" class="px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-semibold rounded-lg transition-colors text-sm" title="⚠️ TEMPORÁRIO: Deleta todos os pedidos (use apenas em desenvolvimento)">
+              🗑️ Limpar Pedidos
+            </button>
           </div>
 
           <div class="bg-white rounded-lg shadow-md overflow-hidden">

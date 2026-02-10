@@ -506,6 +506,36 @@ module.exports = (pool) => {
     }
   });
 
+  // ⚠️ TEMPORÁRIO: Deletar todos os pedidos (apenas para desenvolvimento)
+  router.delete('/admin/all', async (req, res) => {
+    try {
+      const { confirm } = req.body;
+      
+      if (confirm !== true) {
+        return res.status(400).json({ error: 'Confirmação necessária. Envie { confirm: true }' });
+      }
+
+      // Deletar receitas primeiro (por causa da foreign key)
+      await pool.query('DELETE FROM revenue');
+      
+      // Deletar itens dos pedidos
+      await pool.query('DELETE FROM order_items');
+      
+      // Deletar pedidos
+      const result = await pool.query('DELETE FROM orders');
+
+      console.log('🗑️ Todos os pedidos foram deletados!');
+      
+      res.json({
+        message: '✅ Todos os pedidos foram deletados com sucesso',
+        deleted_orders: result.rowCount
+      });
+    } catch (error) {
+      console.error('Erro ao deletar todos os pedidos:', error);
+      res.status(500).json({ error: 'Erro ao deletar pedidos' });
+    }
+  });
+
   return router;
 };
 

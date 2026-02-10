@@ -19,6 +19,7 @@ let cart = [];
 let products = [];
 let currentOrder = null;
 let paymentPollingInterval = null;
+let currentPixOverlay = null; // ← Guardar referência do modal PIX atual
 
 // Gerar ID do usuário
 function generateUserId() {
@@ -41,6 +42,10 @@ const checkoutBtn = document.getElementById('checkout-btn');
 const checkoutForm = document.getElementById('checkout-form');
 const searchInput = document.getElementById('search-input');
 const categoryFilter = document.getElementById('category-filter');
+const myOrdersBtn = document.getElementById('my-orders-btn');
+const ordersModal = document.getElementById('orders-modal');
+const ordersListDiv = document.getElementById('orders-list');
+const refreshOrdersBtn = document.getElementById('refresh-orders-btn');
 
 // Verificar elementos críticos (ajuda a diagnosticar carregamento/caching)
 const missing = [];
@@ -96,7 +101,176 @@ document.querySelectorAll('.modal').forEach(modal => {
 // Inicializar
 document.addEventListener('DOMContentLoaded', () => {
   loadProducts();
+  initUserOrders();
 });
+
+// ------------------- Meus Pedidos -------------------
+let userOrders = [];
+let ordersPollingInterval = null;
+let lastOrderStatusMap = {}; // map orderId -> status
+
+function initUserOrders() {
+  if (myOrdersBtn) {
+    myOrdersBtn.addEventListener('click', () => {
+      ordersModal.classList.remove('hidden');
+      loadUserOrders();
+    });
+  }
+  document.querySelectorAll('#orders-modal .close-modal').forEach(btn => {
+    btn.addEventListener('click', () => {
+      ordersModal.classList.add('hidden');
+    });
+  });
+  if (refreshOrdersBtn) refreshOrdersBtn.addEventListener('click', loadUserOrders);
+
+  // Iniciar polling de orders a cada 8s
+  ordersPollingInterval = setInterval(() => {
+    loadUserOrders(false);
+  }, 8000);
+}
+
+async function loadUserOrders(showNotifyOnChange = true) {
+  try {
+    const res = await fetch(`${API_URL}/orders/user/${userId}`);
+    if (!res.ok) {
+      console.warn('Erro ao buscar pedidos do usuário:', res.status);
+      return;
+    }
+    const data = await res.json();
+    const orders = Array.isArray(data) ? data : (data.orders || []);
+    // Detectar mudanças de status
+    orders.forEach(o => {
+      const prev = lastOrderStatusMap[o.id];
+      if (prev && prev !== o.status && showNotifyOnChange) {
+        notify.info(`Pedido #${o.id} atualizado: ${statusLabel(o.status)}`, 4000);
+      }
+      lastOrderStatusMap[o.id] = o.status;
+    });
+    userOrders = orders;
+    renderOrdersList();
+  } catch (e) {
+    console.error('Erro ao carregar pedidos do usuário:', e);
+  }
+}
+
+function renderOrdersList() {
+  if (!ordersListDiv) return;
+  if (!userOrders || userOrders.length === 0) {
+    ordersListDiv.innerHTML = '<p class="text-center text-gray-500">Nenhum pedido encontrado.</p>';
+    return;
+  }
+  ordersListDiv.innerHTML = '';
+  userOrders.forEach(order => {
+    const el = document.createElement('div');
+    el.className = 'border rounded-lg p-3 bg-white shadow-sm';
+    const created = new Date(order.created_at || order.createdAt || order.created);
+    const dd = String(created.getDate()).padStart(2,'0');
+    const MM = String(created.getMonth()+1).padStart(2,'0');
+    const yyyy = created.getFullYear();
+    const hh = String(created.getHours()).padStart(2,'0');
+    const min = String(created.getMinutes()).padStart(2,'0');
+    const dateTimeStr = `${dd}/${MM}/${yyyy} - ${hh}:${min}`;
+
+    const label = statusLabel(order.status);
+    const statusBadge = `<span class="text-xs font-semibold px-2 py-1 rounded-full" style="background:${statusColor(order.status)}; color:white">${label}</span>`;
+
+    el.innerHTML = `
+      <div class="flex justify-between items-start mb-2">
+        <div>
+          <div class="text-sm text-gray-600">Pedido #${order.id}</div>
+          <div class="text-base font-bold text-green-600">R$ ${parseFloat(order.total || 0).toFixed(2)}</div>
+        </div>
+        <div class="text-right">
+          ${statusBadge}
+          <div class="text-xs text-gray-500 mt-1">${dateTimeStr}</div>
+        </div>
+      </div>
+      <div class="text-sm text-gray-700 mb-2">${(order.items || []).map(it => `${it.quantity}x ${it.name || it.product_name || ''}`).join(', ')}</div>
+      <div class="flex gap-2">
+        <button class="btn-view-order bg-green-600 hover:bg-green-700 text-white font-semibold py-1 px-3 rounded" data-id="${order.id}">Ver</button>
+        <button class="btn-open-confirmation bg-gray-100 hover:bg-gray-200 text-gray-800 font-semibold py-1 px-3 rounded" data-id="${order.id}">Nota</button>
+      </div>
+    `;
+
+    ordersListDiv.appendChild(el);
+  });
+
+  // Handlers para botões
+  ordersListDiv.querySelectorAll('.btn-view-order').forEach(b => {
+    b.addEventListener('click', (e) => {
+      const id = e.target.getAttribute('data-id');
+      // navegar para detalhes ou abrir modal de pagamento se necessário
+      const order = userOrders.find(o => String(o.id) === String(id));
+      if (order) {
+        alert(`Pedido #${order.id}\nStatus: ${statusLabel(order.status)}\nTotal: R$ ${parseFloat(order.total||0).toFixed(2)}`);
+      }
+    });
+  });
+  ordersListDiv.querySelectorAll('.btn-open-confirmation').forEach(b => {
+    b.addEventListener('click', (e) => {
+      const id = e.target.getAttribute('data-id');
+      const order = userOrders.find(o => String(o.id) === String(id));
+      if (order) {
+        // mostrar modal de confirmação com detalhes
+        document.getElementById('order-id-display').textContent = `#${order.id}`;
+        const dtEl = document.getElementById('order-datetime-display');
+        if (dtEl) {
+          const created = new Date(order.created_at || order.createdAt || order.created);
+          const dd = String(created.getDate()).padStart(2,'0');
+          const MM = String(created.getMonth()+1).padStart(2,'0');
+          const yyyy = created.getFullYear();
+          const hh = String(created.getHours()).padStart(2,'0');
+          const min = String(created.getMinutes()).padStart(2,'0');
+          dtEl.textContent = `${dd}/${MM}/${yyyy} - ${hh}:${min}`;
+        }
+        confirmationModal.classList.remove('hidden');
+        ordersModal.classList.add('hidden');
+      }
+    });
+  });
+}
+
+function statusKey(status) {
+  if (!status) return 'unknown';
+  const s = String(status).toLowerCase();
+  // mapeamentos conhecidos (ing/pt-br)
+  if (s === 'pendente' || s === 'pending') return 'pending';
+  if (s === 'confirmado' || s === 'confirmed' || s === 'confirmed_payment') return 'confirmed';
+  if (s === 'preparando' || s === 'preparing' || s === 'preparing_order') return 'preparing';
+  if (s === 'out_for_delivery' || s === 'out_for_delivery' || s.includes('delivery') || s === 'em entrega') return 'out_for_delivery';
+  if (s === 'entregue' || s === 'delivered' || s === 'delivered_order') return 'delivered';
+  if (s === 'cancelado' || s === 'cancelled' || s === 'canceled') return 'cancelled';
+  if (s === 'ready' || s === 'pronto') return 'ready';
+  return s.replace(/[^a-z0-9_]/g, '_');
+}
+
+function statusLabel(status) {
+  const key = statusKey(status);
+  switch (key) {
+    case 'pending': return 'Pendente';
+    case 'confirmed': return 'Confirmado';
+    case 'preparing': return 'Preparando';
+    case 'out_for_delivery': return 'Em entrega';
+    case 'delivered': return 'Entregue';
+    case 'cancelled': return 'Cancelado';
+    case 'ready': return 'Pronto';
+    default: return String(status || '').charAt(0).toUpperCase() + String(status || '').slice(1);
+  }
+}
+
+function statusColor(status) {
+  const key = statusKey(status);
+  switch (key) {
+    case 'pending': return '#f59e0b';
+    case 'confirmed': return '#10b981';
+    case 'preparing': return '#3b82f6';
+    case 'out_for_delivery': return '#06b6d4';
+    case 'delivered': return '#059669';
+    case 'cancelled': return '#ef4444';
+    case 'ready': return '#059669';
+    default: return '#6b7280';
+  }
+}
 
 // Buscar produtos
 async function loadProducts() {
@@ -228,7 +402,7 @@ async function addToCart(productId) {
 
     if (!response.ok) {
       const error = await response.json();
-      alert(error.error || 'Erro ao adicionar ao carrinho');
+      notify.error(error.error || 'Erro ao adicionar ao carrinho');
       return;
     }
 
@@ -237,11 +411,11 @@ async function addToCart(productId) {
 
     // Animar mensagem saindo de dentro do carrinho para o centro da tela
     const product = products.find(p => p.id === productId) || { name: 'Produto' };
-    animateCartMessage(`${product.name} foi adicionado ao carrinho`);
+    animateCartMessage(`✓ ${product.name} adicionado ao carrinho`);
 
   } catch (error) {
     console.error('Erro ao adicionar ao carrinho:', error);
-    alert('Erro ao adicionar ao carrinho');
+    notify.error('Erro ao adicionar ao carrinho');
   }
 }
 
@@ -304,13 +478,27 @@ function animateCartMessage(text) {
   const msg = document.createElement('div');
   msg.className = 'floating-cart-message';
   msg.textContent = text;
-  msg.style.position = 'fixed';
-  msg.style.left = `${cartRect.left + cartRect.width/2}px`;
-  msg.style.top = `${cartRect.top + cartRect.height/2}px`;
-  msg.style.transform = 'translate(-50%, -50%) scale(0.9)';
-  msg.style.zIndex = 2150000000;
-  msg.style.pointerEvents = 'none';
-  msg.style.opacity = '0';
+  
+  // Estilos inline para uma mensagem bonita e profissional
+  msg.style.cssText = `
+    position: fixed;
+    left: ${cartRect.left + cartRect.width/2}px;
+    top: ${cartRect.top + cartRect.height/2}px;
+    transform: translate(-50%, -50%) scale(0.8);
+    z-index: 2150000000;
+    pointer-events: none;
+    opacity: 0;
+    background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+    color: white;
+    padding: 16px 24px;
+    border-radius: 12px;
+    font-weight: 700;
+    font-size: 16px;
+    box-shadow: 0 10px 30px rgba(16, 185, 129, 0.3);
+    backdrop-filter: blur(10px);
+    white-space: nowrap;
+  `;
+  
   document.body.appendChild(msg);
 
   // Forçar reflow
@@ -349,13 +537,14 @@ async function updateQuantity(itemId, newQuantity) {
     });
 
     if (response.ok) {
-      loadCart();
+      await loadCart();
+      notify.info('Quantidade atualizada');
     } else {
-      alert('Erro ao atualizar quantidade');
+      notify.error('Erro ao atualizar quantidade');
     }
   } catch (error) {
     console.error('Erro:', error);
-    alert('Erro ao atualizar quantidade');
+    notify.error('Erro ao atualizar quantidade');
   }
 }
 
@@ -367,13 +556,14 @@ async function removeFromCart(itemId) {
     });
 
     if (response.ok) {
+      notify.info('Produto removido do carrinho');
       loadCart();
     } else {
-      alert('Erro ao remover item');
+      notify.error('Erro ao remover item');
     }
   } catch (error) {
     console.error('Erro:', error);
-    alert('Erro ao remover item');
+    notify.error('Erro ao remover item');
   }
 }
 
@@ -406,7 +596,7 @@ async function handleCheckout(e) {
 
     if (!response.ok) {
       const error = await response.json();
-      alert(error.error || 'Erro ao criar pedido');
+      notify.error(error.error || 'Erro ao criar pedido');
       return;
     }
 
@@ -417,7 +607,7 @@ async function handleCheckout(e) {
     generatePixPayment(data.order.id, data.order.total);
   } catch (error) {
     console.error('Erro:', error);
-    alert('Erro ao processar pedido');
+    notify.error('Erro ao processar pedido');
   }
 }
 
@@ -449,7 +639,7 @@ async function generatePixPayment(orderId, amount) {
     if (!response.ok) {
       loadingDiv.remove();
       const error = await response.json();
-      alert(error.error || 'Erro ao gerar PIX');
+      notify.error(error.error || 'Erro ao gerar PIX');
       return;
     }
 
@@ -465,7 +655,7 @@ async function generatePixPayment(orderId, amount) {
     console.error('Erro ao gerar PIX:', error);
     const loading = document.getElementById('pix-loading');
     if (loading) loading.remove();
-    alert('Erro ao gerar PIX');
+    notify.error('Erro ao gerar PIX');
   }
 }
 
@@ -487,55 +677,71 @@ function displayPixQrModal(pixData, amount, orderId) {
 
   console.log('displayPixQrModal - fontes detectadas:', { base64, qrUrl, brcode, paymentId });
 
-  // Criar overlay (escurecimento) — SEM classes, apenas inline styles com !important via cssText
+  // Criar overlay (escurecimento) — SEM classes. Definir estilos via style.setProperty para forçar !important
   const overlay = document.createElement('div');
-  overlay.id = 'pix-qr-modal-' + Date.now();
-  
-  // Aplicar estilos via cssText (ÚNICO jeito de !important funcionar em JS)
-  overlay.style.cssText = `
-    position: fixed !important;
-    top: 0 !important;
-    left: 0 !important;
-    width: 100% !important;
-    height: 100% !important;
-    display: flex !important;
-    align-items: center !important;
-    justify-content: center !important;
-    z-index: 9999999999 !important;
-    background-color: rgba(0, 0, 0, 0.7) !important;
-    padding: 20px !important;
-    box-sizing: border-box !important;
-    margin: 0 !important;
-    border: none !important;
-    visibility: visible !important;
-    opacity: 1 !important;
-    pointer-events: auto !important;
-    overflow: auto !important;
-  `;
+  const pixModalId = 'pix-qr-modal-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
+  overlay.id = pixModalId;
 
-  // Container do card — SEM classes, apenas inline styles com !important via cssText
+  // Definir propriedades de estilo individualmente com prioridade 'important'
+  overlay.style.setProperty('position', 'fixed', 'important');
+  overlay.style.setProperty('top', '0', 'important');
+  overlay.style.setProperty('left', '0', 'important');
+  overlay.style.setProperty('width', '100%', 'important');
+  overlay.style.setProperty('height', '100%', 'important');
+  overlay.style.setProperty('display', 'flex', 'important');
+  overlay.style.setProperty('align-items', 'center', 'important');
+  overlay.style.setProperty('justify-content', 'center', 'important');
+  overlay.style.setProperty('z-index', '9999999999', 'important');
+  overlay.style.setProperty('background-color', 'rgba(0, 0, 0, 0.7)', 'important');
+  overlay.style.setProperty('padding', '20px', 'important');
+  overlay.style.setProperty('box-sizing', 'border-box', 'important');
+  overlay.style.setProperty('margin', '0', 'important');
+  overlay.style.setProperty('border', 'none', 'important');
+  overlay.style.setProperty('visibility', 'visible', 'important');
+  overlay.style.setProperty('opacity', '1', 'important');
+  overlay.style.setProperty('pointer-events', 'auto', 'important');
+  overlay.style.setProperty('overflow', 'auto', 'important');
+
+  // Remover qualquer classe conflitante (hidden, modal, etc)
+  overlay.className = ''; // Limpar todas as classes
+  
+  // Adicionar apenas a classe de reforço (é a ÚNICA classe no elemento)
+  overlay.classList.add('pix-qr-force');
+  
+  // ⚡ FORÇA ULTRA-AGRESSIVA: Usar cssText como último recurso (sobrescreve style.setProperty)
+  overlay.style.cssText = 'position: fixed !important; top: 0 !important; left: 0 !important; width: 100% !important; height: 100% !important; display: flex !important; align-items: center !important; justify-content: center !important; z-index: 9999999999 !important; background-color: rgba(0, 0, 0, 0.7) !important; padding: 20px !important; box-sizing: border-box !important; margin: 0 !important; border: none !important; visibility: visible !important; opacity: 1 !important; pointer-events: auto !important; overflow: auto !important;';
+  
+  // 🔄 MutationObserver PERMANENTE: Detectar qualquer mudança e corrigir IMEDIATAMENTE
+  const observer = new MutationObserver((mutations) => {
+    // Se algo tentou adicionar classe hidden ou mudar style, corrige
+    if (overlay.classList.contains('hidden')) {
+      overlay.classList.remove('hidden');
+      console.warn('⚠️ MutationObserver: Classe .hidden foi adicionada, removendo...');
+    }
+    const computed = window.getComputedStyle(overlay).display;
+    if (computed !== 'flex') {
+      console.warn(`⚠️ MutationObserver: display='${computed}', reforçando...`);
+      overlay.style.cssText = 'position: fixed !important; top: 0 !important; left: 0 !important; width: 100% !important; height: 100% !important; display: flex !important; align-items: center !important; justify-content: center !important; z-index: 9999999999 !important; background-color: rgba(0, 0, 0, 0.7) !important; padding: 20px !important; box-sizing: border-box !important; margin: 0 !important; border: none !important; visibility: visible !important; opacity: 1 !important; pointer-events: auto !important; overflow: auto !important;';
+    }
+  });
+  
+  // Observar mudanças no elemento: attributes (class, style) e subtree
+  observer.observe(overlay, {
+    attributes: true,
+    attributeFilter: ['class', 'style'],
+    subtree: false
+  });
+  
+  // Guardar observer na referência global para parar depois
+  overlay._pixObserver = observer;
+
+  // Container do card — SEM classes, apenas inline styles com !important via setAttribute
   const card = document.createElement('div');
-  card.style.cssText = `
-    position: relative !important;
-    background: white !important;
-    border-radius: 12px !important;
-    padding: 40px !important;
-    text-align: center !important;
-    max-width: 500px !important;
-    width: 90vw !important;
-    max-height: 85vh !important;
-    overflow-y: auto !important;
-    box-shadow: 0 20px 25px rgba(0, 0, 0, 0.2) !important;
-    box-sizing: border-box !important;
-    margin: 0 auto !important;
-    z-index: 10000000000 !important;
-    pointer-events: auto !important;
-  `;
+  card.setAttribute('style', 'position: relative !important; background: white !important; border-radius: 12px !important; padding: 40px !important; text-align: center !important; max-width: 500px !important; width: 90vw !important; max-height: 85vh !important; overflow-y: auto !important; box-shadow: 0 20px 25px rgba(0, 0, 0, 0.2) !important; box-sizing: border-box !important; margin: 0 auto !important; z-index: 10000000000 !important; pointer-events: auto !important;');
   
   // Responsividade para telas muito pequenas
   if (window.innerWidth < 480) {
-    const currentPadding = card.style.padding;
-    card.style.cssText = card.style.cssText.replace('padding: 40px !important;', 'padding: 20px !important;');
+    card.setAttribute('style', card.getAttribute('style').replace('padding: 40px !important;', 'padding: 20px !important;'));
   }
 
   // Novo layout do modal: espelhando o design fornecido
@@ -549,7 +755,7 @@ function displayPixQrModal(pixData, amount, orderId) {
       </div>
     </div>
 
-    <div id="pix-status-msg" style="display:flex; align-items:center; gap:8px; color:#6b21a8; font-weight:600; margin-bottom:8px;">⏳ Aguardando pagamento...</div>
+    <div id="pix-status-msg" style="display:flex; align-items:center; justify-content:center; gap:8px; color:#6b21a8; font-weight:600; margin-bottom:8px; background:linear-gradient(135deg, rgba(168, 85, 247, 0.1) 0%, rgba(139, 92, 246, 0.1) 100%); padding:12px 16px; border-radius:10px; border-left:4px solid #a855f7;">⏳ Aguardando pagamento...</div>
 
     ${brcode ? `
       <div style="margin-bottom:12px;">
@@ -566,8 +772,7 @@ function displayPixQrModal(pixData, amount, orderId) {
       <div style="font-size:20px; font-weight:800; color:#047857;">R$ ${valorNumerico.toFixed(2)}</div>
     </div>
 
-    <div style="display:flex; flex-direction:column; gap:10px; margin-top:6px;">
-      <button id="pix-whatsapp" style="background:#10b981; color:white; border:none; padding:12px; border-radius:10px; font-weight:800;">📱 Enviar Pedido pelo WhatsApp</button>
+    <div id="pix-buttons-container" style="display:flex; flex-direction:column; gap:10px; margin-top:6px;">
       <button id="pix-cancel" style="background:#ef4444; color:white; border:none; padding:12px; border-radius:10px; font-weight:800;">✖ Cancelar Compra</button>
       <button id="pix-back" style="background:#6b7280; color:white; border:none; padding:10px; border-radius:10px; font-weight:700;">← Voltar</button>
     </div>
@@ -577,83 +782,91 @@ function displayPixQrModal(pixData, amount, orderId) {
   // guardar orderId no overlay para verificações externas (visibilitychange)
   overlay.setAttribute('data-order-id', orderId);
   
+  // ✅ GUARDAR REFERÊNCIA GLOBAL PARA O POLLING ENCONTRAR
+  currentPixOverlay = overlay;
+  
   // APPEND AO BODY AGORA (COM ESTILOS JÁ APLICADOS)
   document.body.appendChild(overlay);
+  
+  // Verificar que foi realmente adicionado ao DOM
+  if (overlay.parentElement !== document.body) {
+    console.error('❌ ERRO: Overlay não foi adicionado ao body!');
+    notify.error('Erro ao criar modal PIX');
+    return;
+  }
 
   // Forçar reflow para garantir renderização
   void overlay.offsetHeight;
-  void overlay.offsetWidth;
   
-  // ⚠️ FORÇAR VISIBILIDADE COM setTi meout (dar tempo para reflow completo)
   setTimeout(() => {
-    overlay.style.visibility = 'visible';
-    overlay.style.opacity = '1';
+    const finalDisplay = window.getComputedStyle(overlay).display;
+    console.log('✅ Overlay PIX criado e visível no DOM');
+    console.log('✅ Display:', finalDisplay);
+    console.log('✅ Visibility:', window.getComputedStyle(overlay).visibility);
+    console.log('✅ Z-index:', window.getComputedStyle(overlay).zIndex);
     
-    console.log('✅ Overlay PIX criado:', overlay.id);
-    console.log('✅ Overlay visível:', overlay.offsetParent !== null);
-    console.log('✅ Overlay display:', window.getComputedStyle(overlay).display);
-    console.log('✅ Overlay visibility:', window.getComputedStyle(overlay).visibility);
-    console.log('✅ Overlay z-index:', window.getComputedStyle(overlay).zIndex);
-    console.log('✅ Overlay offsetParent:', overlay.offsetParent);
+    // Se display não for flex, força novamente
+    if (finalDisplay !== 'flex') {
+      console.error(`❌ Display computado é '${finalDisplay}', forçando novamente...`);
+      overlay.style.display = 'flex !important';
+      overlay.style.cssText = 'position: fixed !important; top: 0 !important; left: 0 !important; width: 100% !important; height: 100% !important; display: flex !important; align-items: center !important; justify-content: center !important; z-index: 9999999999 !important; background-color: rgba(0, 0, 0, 0.7) !important; padding: 20px !important; box-sizing: border-box !important; margin: 0 !important; border: none !important; visibility: visible !important; opacity: 1 !important; pointer-events: auto !important; overflow: auto !important;';
+      void overlay.offsetHeight;
+      console.log('✅ Reforçado - Display agora:', window.getComputedStyle(overlay).display);
+    }
+
+    // Checagem imediata para capturar status
+    try {
+      checkOrderStatus(orderId);
+    } catch (e) {
+      console.warn('Erro ao disparar checkOrderStatus:', e);
+    }
+
+    // Iniciar polling
+    if (paymentId) {
+      console.log('⏳ Iniciando polling');
+      try { startPaymentPolling(paymentId, orderId); } catch (e) { console.warn('Erro ao iniciar polling:', e); }
+    }
+
+    // Ligar botões
+    const copyBtn = overlay.querySelector('#pix-copy');
+    if (copyBtn) {
+      copyBtn.addEventListener('click', function() {
+        const ta = overlay.querySelector('#pix-brcode');
+        ta.select();
+        document.execCommand('copy');
+        this.textContent = '✓ Copiado!';
+        setTimeout(() => { this.textContent = '📋 Copiar'; }, 2000);
+      });
+    }
+
+    const cancelBtn = overlay.querySelector('#pix-cancel');
+    if (cancelBtn) {
+      cancelBtn.addEventListener('click', () => {
+        cancelPixPayment(orderId);
+      });
+    }
+
+    // Botão WhatsApp será adicionado apenas após confirmação de pagamento
+
+    const backBtn = overlay.querySelector('#pix-back');
+    if (backBtn) {
+      backBtn.addEventListener('click', () => {
+        // Parar o MutationObserver antes de remover
+        if (overlay._pixObserver) {
+          overlay._pixObserver.disconnect();
+        }
+        try { 
+          if (overlay.parentElement === document.body) {
+            document.body.removeChild(overlay);
+          }
+        } catch (e) { /* already removed */ }
+        document.body.style.overflow = '';
+        currentPixOverlay = null;
+      });
+    }
   }, 100);
 
   document.body.style.overflow = 'hidden';
-
-  // Ligar botões
-  const copyBtn = document.getElementById('pix-copy');
-  if (copyBtn) {
-    copyBtn.addEventListener('click', function() {
-      const ta = document.getElementById('pix-brcode');
-      ta.select();
-      document.execCommand('copy');
-      this.textContent = '✓ Copiado!';
-      setTimeout(() => { this.textContent = '📋 Copiar Chave PIX'; }, 2000);
-    });
-  }
-
-  const cancelBtn = document.getElementById('pix-cancel');
-  if (cancelBtn) {
-    cancelBtn.addEventListener('click', () => {
-      cancelPixPayment(orderId);
-    });
-  }
-
-  // Checagem imediata para capturar status já atualizado pelo webhook
-  try {
-    checkOrderStatus(orderId);
-  } catch (e) {
-    console.warn('Erro ao disparar checkOrderStatus imediato:', e);
-  }
-
-  // Iniciar polling periódico caso tenhamos paymentId
-  if (paymentId) {
-    console.log('⏳ Iniciando polling com paymentId:', paymentId, 'orderId:', orderId);
-    try { startPaymentPolling(paymentId, orderId); } catch (e) { console.warn('Erro ao iniciar polling:', e); }
-  } else {
-    console.warn('⚠️ Nenhum paymentId obtido, polling não iniciado');
-  }
-
-  // Botão WhatsApp
-  const waBtn = document.getElementById('pix-whatsapp');
-  if (waBtn) {
-    waBtn.addEventListener('click', () => {
-      const chave = document.getElementById('pix-brcode') ? document.getElementById('pix-brcode').value : '';
-      const texto = `Olá, segue o pagamento PIX para o pedido ${orderId} - Total: R$ ${valorNumerico.toFixed(2)}.\nChave PIX:\n${chave}`;
-      const url = `https://wa.me/?text=${encodeURIComponent(texto)}`;
-      window.open(url, '_blank');
-    });
-  }
-
-  // Botão Voltar — apenas fecha o modal sem cancelar o pedido automaticamente
-  const backBtn = document.getElementById('pix-back');
-  if (backBtn) {
-    backBtn.addEventListener('click', () => {
-      try { document.body.removeChild(overlay); } catch (e) { /* already removed */ }
-      document.body.style.overflow = '';
-    });
-  }
-
-  paymentModal.classList.add('hidden');
 }
 
 // Fazer polling para verificar status do pagamento
@@ -682,16 +895,16 @@ function startPaymentPolling(paymentId, orderId) {
       
       console.log(`📦 Status atual: status='${order.status}', payment_status='${order.payment_status}'`);
       
-      // Verificar se modal ainda existe
-      const modal = document.querySelector('[id^="pix-qr-modal-"]');
+      // ✅ Verificar se modal ainda existe (usar referência global)
+      const modal = currentPixOverlay && currentPixOverlay.parentElement ? currentPixOverlay : null;
       if (!modal) {
-        console.warn('⚠️ Modal PIX não existe mais, parando polling');
+        console.warn('⚠️ Modal PIX não existe mais (referência perdida), parando polling');
         clearInterval(paymentPollingInterval);
         return false;
       }
       
       // Atualizar texto de status no modal
-      const statusEl = document.getElementById('pix-status-msg');
+      const statusEl = modal.querySelector('#pix-status-msg');
       if (statusEl) {
         if (order.status === 'confirmed' && order.payment_status === 'approved') {
           console.log('✅ CONFIRMADO! Atualizando visual...');
@@ -700,7 +913,7 @@ function startPaymentPolling(paymentId, orderId) {
           statusEl.style.fontSize = '16px';
           statusEl.style.fontWeight = '700';
         } else {
-          statusEl.innerHTML = `⏳ Aguardando pagamento... (${attempts}/${maxAttempts})`;
+          statusEl.innerHTML = '⏳ Aguardando pagamento...';
         }
       }
 
@@ -743,7 +956,7 @@ async function checkOrderStatus(orderId) {
     // Atualizar mensagem de status no modal, se existir
     const statusEl = document.getElementById('pix-status-msg');
     if (statusEl) {
-      statusEl.textContent = `Status atual: ${order.status} (${order.payment_status || 'n/a'})`;
+      statusEl.textContent = `Status atual: ${statusLabel(order.status)} (${order.payment_status || 'n/a'})`;
     }
 
     if (order.status === 'confirmed' && order.payment_status === 'approved') {
@@ -758,10 +971,42 @@ async function checkOrderStatus(orderId) {
 // Rechecar automaticamente quando o usuário retornar à aba (caso o webhook tenha sido entregue enquanto a aba estava em segundo plano)
 document.addEventListener('visibilitychange', () => {
   if (!document.hidden) {
-    const modal = document.querySelector('[id^="pix-qr-modal-"]');
-    if (modal) {
+    // ✅ Usar referência global
+    const modal = currentPixOverlay;
+    if (modal && modal.parentElement) {
       const oid = modal.getAttribute('data-order-id');
-      if (oid) checkOrderStatus(oid);
+      
+      // Se o pagamento foi confirmado, fechar o modal após 2 segundos
+      if (modal._paymentConfirmed) {
+        console.log('🔔 Cliente retornou ao site. Fechando modal em 2 segundos...');
+        setTimeout(() => {
+          if (modal._pixObserver) {
+            modal._pixObserver.disconnect();
+          }
+          try {
+            if (modal.parentElement) {
+              document.body.removeChild(modal);
+            }
+          } catch (e) { /* already removed */ }
+          document.body.style.overflow = 'auto';
+          currentPixOverlay = null;
+          
+          // Buscar dados da order para mostrar confirmação
+          fetch(`${API_URL}/orders/${oid}`)
+            .then(res => res.json())
+            .then(data => {
+              const order = data.order;
+              showConfirmation(order);
+            })
+            .catch(err => {
+              console.error('Erro ao buscar dados do pedido:', err);
+              showConfirmation({ id: oid, total: 0 });
+            });
+        }, 2000);
+      } else if (oid) {
+        // Se pagamento ainda não confirmado, apenas verificar status
+        checkOrderStatus(oid);
+      }
     }
   }
 });
@@ -769,40 +1014,88 @@ document.addEventListener('visibilitychange', () => {
 // PIX confirmado com sucesso
 function completePixPayment(order) {
   console.log('✅ Completando pagamento PIX:', order.id);
+  notify.success('Pagamento PIX confirmado!', 3000);
   
-  const modal = document.querySelector('[id^="pix-qr-modal-"]');
+  // ✅ Usar referência global
+  const modal = currentPixOverlay;
   if (modal) {
     // Atualizar visualmente o modal para mostrar confirmação
-    const statusEl = document.getElementById('pix-status-msg');
+    const statusEl = modal.querySelector('#pix-status-msg');
     if (statusEl) {
-      statusEl.innerHTML = '✅ Pagamento confirmado!';
-      statusEl.style.color = '#10b981';
-      statusEl.style.fontSize = '16px';
-      statusEl.style.fontWeight = '700';
+      statusEl.innerHTML = `
+        <div style="animation: slideDown 0.5s ease-out; background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: white; padding: 16px 20px; border-radius: 12px; text-align: center; box-shadow: 0 8px 16px rgba(16, 185, 129, 0.3);">
+          <div style="font-size: 32px; margin-bottom: 8px;">✅</div>
+          <div style="font-size: 18px; font-weight: 700; margin-bottom: 4px;">Pagamento Confirmado!</div>
+          <div style="font-size: 14px; opacity: 0.95;">Seu pedido foi recebido com sucesso</div>
+        </div>
+      `;
+      statusEl.style.display = 'flex';
+      statusEl.style.justifyContent = 'center';
     }
     
-    // Desabilitar botões
-    const copyBtn = document.getElementById('pix-copy');
-    const cancelBtn = document.getElementById('pix-cancel');
-    const waBtn = document.getElementById('pix-whatsapp');
-    const backBtn = document.getElementById('pix-back');
+    // Desabilitar/ocultar botões de ação
+    const copyBtn = modal.querySelector('#pix-copy');
+    const cancelBtn = modal.querySelector('#pix-cancel');
+    const backBtn = modal.querySelector('#pix-back');
+    const buttonsContainer = modal.querySelector('#pix-buttons-container');
     
-    if (copyBtn) copyBtn.disabled = true;
-    if (cancelBtn) cancelBtn.disabled = true;
-    if (waBtn) waBtn.disabled = true;
+    if (copyBtn) {
+      copyBtn.disabled = true;
+      copyBtn.style.opacity = '0.5';
+      copyBtn.style.cursor = 'not-allowed';
+    }
+    if (cancelBtn) {
+      cancelBtn.disabled = true;
+      cancelBtn.style.opacity = '0.5';
+      cancelBtn.style.cursor = 'not-allowed';
+    }
+    
+    // Adicionar botão WhatsApp APÓS confirmação
+    if (buttonsContainer) {
+      const whatsappBtn = document.createElement('button');
+      whatsappBtn.id = 'pix-whatsapp-confirmed';
+      whatsappBtn.textContent = '📱 Enviar Pedido pelo WhatsApp';
+      whatsappBtn.style.cssText = 'background:#10b981; color:white; border:none; padding:12px; border-radius:10px; font-weight:800; cursor:pointer; transition:all 0.3s ease;';
+      whatsappBtn.addEventListener('click', () => {
+        const brcode = order.payment?.qr_code || order.payment?.qrCode || '';
+        let dateTimeStr = '';
+        try {
+          const created = order.created_at || order.createdAt || order.created;
+          if (created) {
+            const d = new Date(created);
+            const dd = String(d.getDate()).padStart(2, '0');
+            const MM = String(d.getMonth() + 1).padStart(2, '0');
+            const yyyy = d.getFullYear();
+            const hh = String(d.getHours()).padStart(2, '0');
+            const min = String(d.getMinutes()).padStart(2, '0');
+            dateTimeStr = ` ${dd}/${MM}/${yyyy} - ${hh}:${min}`;
+          }
+        } catch (e) { /* ignore */ }
+        const texto = `✅ Pagamento Confirmado!\\n\\nPedido: ${order.id}\\nTotal: R$ ${order.total.toFixed(2)}${dateTimeStr}\\n\\nChave PIX: ${brcode}`;
+        const url = `https://wa.me/5581987508211?text=${encodeURIComponent(texto)}`;
+        window.open(url, '_blank');
+      });
+      whatsappBtn.addEventListener('mouseenter', () => {
+        whatsappBtn.style.backgroundColor = '#059669';
+        whatsappBtn.style.transform = 'scale(1.02)';
+      });
+      whatsappBtn.addEventListener('mouseleave', () => {
+        whatsappBtn.style.backgroundColor = '#10b981';
+        whatsappBtn.style.transform = 'scale(1)';
+      });
+      buttonsContainer.insertBefore(whatsappBtn, cancelBtn);
+    }
+    
     if (backBtn) {
       backBtn.textContent = '✅ Fechar';
       backBtn.style.backgroundColor = '#10b981';
+      backBtn.style.animation = 'pulse 2s infinite';
     }
     
-    // Esperar 2 segundos e depois fechar
-    console.log('⏳ Fechando modal em 2 segundos...');
-    setTimeout(() => {
-      try { document.body.removeChild(modal); } catch (e) { /* already removed */ }
-      document.body.style.overflow = 'auto';
-      currentOrder = order;
-      showConfirmation(order);
-    }, 2000);
+    // 🚀 Marcar que o pagamento foi confirmado — modal NÃO fecha automaticamente
+    // Vai fechar só quando o cliente voltar ao site
+    modal._paymentConfirmed = true;
+    console.log('✅ Pagamento confirmado. Modal permanece aberto até cliente retornar ao site...');
   }
 }
 
@@ -811,8 +1104,23 @@ function cancelPixPayment(orderId) {
   console.log('🔴 Cancelando pedido PIX:', orderId);
   
   clearInterval(paymentPollingInterval);
-  const modal = document.querySelector('[id^="pix-qr-modal-"]');
-  if (modal) modal.remove();
+  
+  // ✅ Usar referência global e verificar
+  const modal = currentPixOverlay;
+  if (modal && modal.parentElement === document.body) {
+    // Parar o MutationObserver antes de remover
+    if (modal._pixObserver) {
+      modal._pixObserver.disconnect();
+    }
+    try {
+      modal.remove();
+      console.log('✅ Modal removido com sucesso');
+    } catch (e) {
+      console.warn('⚠️ Erro ao remover modal:', e);
+    }
+  }
+  currentPixOverlay = null; // ← Limpar referência
+  
   document.body.style.overflow = 'auto';
   paymentModal.classList.add('hidden');
   
@@ -825,15 +1133,15 @@ function cancelPixPayment(orderId) {
       .then(res => res.json())
       .then(data => {
         console.log('✅ Pedido cancelado e estoque restaurado:', data);
-        alert('Pagamento cancelado e estoque restaurado');
+        notify.success('Pagamento cancelado e estoque restaurado');
       })
       .catch(err => {
         console.error('Erro ao cancelar pedido:', err);
-        alert('Pagamento cancelado');
+        notify.warning('Pagamento cancelado');
       });
   } catch (e) {
     console.warn('Erro ao chamar API de cancelamento:', e);
-    alert('Pagamento cancelado');
+    notify.warning('Pagamento cancelado');
   }
 }
 
@@ -842,11 +1150,51 @@ function pixPaymentTimeout(orderId) {
   const modal = document.querySelector('[id^="pix-qr-modal-"]');
   if (modal) modal.remove();
   document.body.style.overflow = 'auto';
-  alert('Tempo de pagamento expirado. Tente novamente.');
+  notify.error('Tempo de pagamento expirado. Tente novamente.');
 }
 
 // Mostrar confirmação
 function showConfirmation(order) {
   document.getElementById('order-id-display').textContent = order.id;
+  // Exibir data e hora do pedido (se disponível) no formato DD/MM/YYYY - HH:MM
+  try {
+    const created = order.created_at || order.createdAt || order.created;
+    if (created) {
+      const d = new Date(created);
+      const dd = String(d.getDate()).padStart(2, '0');
+      const MM = String(d.getMonth() + 1).padStart(2, '0');
+      const yyyy = d.getFullYear();
+      const hh = String(d.getHours()).padStart(2, '0');
+      const min = String(d.getMinutes()).padStart(2, '0');
+      const dateTimeStr = `${dd}/${MM}/${yyyy} - ${hh}:${min}`;
+      const dtEl = document.getElementById('order-datetime-display');
+      if (dtEl) dtEl.textContent = dateTimeStr;
+    }
+  } catch (e) {
+    console.warn('Erro ao formatar data/hora do pedido:', e);
+  }
+
   confirmationModal.classList.remove('hidden');
+  notify.success(`Pedido #${order.id} confirmado! Aguarde atualizações por WhatsApp.`, 4000);
+
+  // Ligar botão WhatsApp no modal de confirmação (inclui hora:minute)
+  const whatsappConfirmBtn = document.getElementById('confirmation-whatsapp-btn');
+  if (whatsappConfirmBtn) {
+    whatsappConfirmBtn.addEventListener('click', () => {
+      const created = order.created_at || order.createdAt || order.created;
+      let dateTimeStr = '';
+      if (created) {
+        const d = new Date(created);
+        const dd = String(d.getDate()).padStart(2, '0');
+        const MM = String(d.getMonth() + 1).padStart(2, '0');
+        const yyyy = d.getFullYear();
+        const hh = String(d.getHours()).padStart(2, '0');
+        const min = String(d.getMinutes()).padStart(2, '0');
+        dateTimeStr = ` ${dd}/${MM}/${yyyy} - ${hh}:${min}`;
+      }
+      const texto = `✅ Pagamento Confirmado!\\n\\nPedido: ${order.id}\\nTotal: R$ ${order.total.toFixed(2)}${dateTimeStr}\\n\\nOlá, segue meu pedido confirmado e pago. Aguardo a entrega!`;
+      const url = `https://wa.me/5581987508211?text=${encodeURIComponent(texto)}`;
+      window.open(url, '_blank');
+    }, { once: true }); // Executar apenas uma vez
+  }
 }

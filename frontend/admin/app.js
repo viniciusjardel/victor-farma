@@ -16,6 +16,42 @@ const orderModal = document.getElementById('order-modal');
 const productSearchInput = document.getElementById('product-search');
 const orderStatusFilter = document.getElementById('order-status-filter');
 
+// Admin toast util
+function showAdminToast(message, type = 'success') {
+  try {
+    const wrapper = document.getElementById('admin-toast');
+    const msg = document.getElementById('admin-toast-message');
+    const icon = document.getElementById('admin-toast-icon');
+    const ok = document.getElementById('admin-toast-ok');
+    if (!wrapper || !msg || !ok) return alert(message);
+
+    msg.textContent = message;
+    // estilo pelo tipo
+    const card = document.getElementById('admin-toast-card');
+    if (type === 'success') {
+      card.classList.remove('bg-red-600');
+      card.classList.add('bg-gray-900');
+    } else if (type === 'error') {
+      card.classList.remove('bg-gray-900');
+      card.classList.add('bg-red-600');
+    }
+
+    wrapper.classList.remove('hidden');
+    // foco no botão OK
+    ok.focus();
+
+    const hide = () => { wrapper.classList.add('hidden'); };
+    ok.onclick = hide;
+
+    // auto-dismiss after 5s
+    clearTimeout(wrapper._dismissTimeout);
+    wrapper._dismissTimeout = setTimeout(hide, 5000);
+  } catch (e) {
+    console.error('Erro showAdminToast:', e);
+    alert(message);
+  }
+}
+
 // Event Listeners
 navBtns.forEach(btn => {
   btn.addEventListener('click', (e) => {
@@ -174,6 +210,7 @@ function displayProducts(products) {
       <td class="px-6 py-4 text-gray-600">${product.category || '-'}</td>
       <td class="px-6 py-4 flex gap-2">
         <button class="px-3 py-1 bg-blue-500 hover:bg-blue-600 text-white text-xs rounded font-semibold transition-colors" onclick="openEditProductModal('${product.id}')">Editar</button>
+        <button class="px-3 py-1 bg-yellow-500 hover:bg-yellow-600 text-white text-xs rounded font-semibold transition-colors" onclick="debugDeleteProduct('${product.id}')" title="Diagnosticar antes de deletar">🔍</button>
         <button class="px-3 py-1 bg-red-600 hover:bg-red-700 text-white text-xs rounded font-semibold transition-colors" onclick="deleteProduct('${product.id}')">Deletar</button>
       </td>
     </tr>
@@ -248,16 +285,49 @@ async function handleSaveProduct(e) {
     }
 
     if (!response.ok) {
-      alert('Erro ao salvar produto');
+      showAdminToast('Erro ao salvar produto', 'error');
       return;
     }
 
     closeProductModal();
     loadProducts();
-    alert('Produto salvo com sucesso!');
+    showAdminToast('Produto salvo com sucesso!', 'success');
   } catch (error) {
     console.error('Erro:', error);
-    alert('Erro ao salvar produto');
+    showAdminToast('Erro ao salvar produto', 'error');
+  }
+}
+
+async function debugDeleteProduct(productId) {
+  try {
+    console.log(`🔍 Diagnosticando produto: ${productId}`);
+    
+    const response = await fetch(`${API_URL}/products/debug/info/${productId}`);
+    const data = await response.json();
+    
+    console.group('📊 Diagnóstico de Deletamento');
+    console.log('Produto encontrado:', data.product ? '✅ SIM' : '❌ NÃO');
+    if (data.product) {
+      console.log('  ID:', data.product.id);
+      console.log('  Nome:', data.product.name);
+      console.log('  Criado em:', data.product.created_at);
+    }
+    console.log('Itens no carrinho referenciando este produto:', data.cartItems);
+    console.log('Itens em pedidos referenciando este produto:', data.orderItems);
+    console.log('Pode deletar:', data.canDelete ? '✅ SIM' : '❌ NÃO');
+    console.groupEnd();
+    
+    // Mostrar ao usuário também
+    const msg = `📊 Diagnóstico:\n` +
+      `✓ Produto: ${data.product ? data.product.name : 'NÃO ENCONTRADO'}\n` +
+      `✓ Referências em carrinho: ${data.cartItems}\n` +
+      `✓ Referências em pedidos: ${data.orderItems}\n` +
+      `✓ Pode deletar: ${data.canDelete ? 'SIM' : 'NÃO'}`;
+    
+    alert(msg);
+  } catch (error) {
+    console.error('❌ Erro ao diagnosticar:', error);
+    alert(`Erro ao diagnosticar: ${error.message}`);
   }
 }
 
@@ -265,20 +335,47 @@ async function deleteProduct(productId) {
   if (!confirm('Tem certeza que deseja deletar este produto?')) return;
 
   try {
+    console.log(`🗑️ Deletando produto: ${productId}`);
+    
     const response = await fetch(`${API_URL}/products/${productId}`, {
       method: 'DELETE'
     });
 
-    if (!response.ok) {
-      alert('Erro ao deletar produto');
+    console.log(`Resposta do servidor: ${response.status}`);
+    
+    let responseData;
+    try {
+      responseData = await response.json();
+    } catch (parseErr) {
+      console.error('❌ Erro ao fazer parse do JSON:', parseErr);
+      showAdminToast('Erro: Resposta inválida do servidor', 'error');
       return;
     }
 
-    loadProducts();
-    alert('Produto deletado com sucesso!');
+    console.log('Dados da resposta:', responseData);
+
+    if (!response.ok) {
+      const errorMsg = responseData?.message || responseData?.error || responseData?.details || 'Erro desconhecido';
+      console.error(`❌ Erro HTTP ${response.status}: ${errorMsg}`);
+      showAdminToast(`Erro ao deletar (${response.status}): ${errorMsg}`, 'error');
+      return;
+    }
+
+    if (responseData.success === false) {
+      const errorMsg = responseData.message || responseData.error || 'Erro desconhecido';
+      console.error(`❌ Erro na resposta: ${errorMsg}`);
+      showAdminToast(`Erro: ${errorMsg}`, 'error');
+      return;
+    }
+
+    console.log('✅ Produto deletado com sucesso');
+    setTimeout(() => {
+      loadProducts();
+    }, 300);
+    showAdminToast('Produto deletado com sucesso!', 'success');
   } catch (error) {
-    console.error('Erro:', error);
-    alert('Erro ao deletar produto');
+    console.error('❌ Erro na requisição:', error);
+    showAdminToast(`Erro: ${error.message || 'Falha na comunicação com servidor'}`, 'error');
   }
 }
 
@@ -438,7 +535,7 @@ async function openOrderModal(orderId) {
     orderModal.classList.remove('hidden');
   } catch (error) {
     console.error('Erro ao carregar pedido:', error);
-    alert('Erro ao carregar detalhes do pedido');
+    showAdminToast('Erro ao carregar detalhes do pedido', 'error');
   }
 }
 
@@ -453,16 +550,16 @@ async function updateOrderStatus(orderId) {
     });
 
     if (!response.ok) {
-      alert('Erro ao atualizar status');
+      showAdminToast('Erro ao atualizar status', 'error');
       return;
     }
 
     orderModal.classList.add('hidden');
     loadOrders();
-    alert('Status atualizado com sucesso!');
+    showAdminToast('Status atualizado com sucesso!', 'success');
   } catch (error) {
     console.error('Erro:', error);
-    alert('Erro ao atualizar status');
+    showAdminToast('Erro ao atualizar status', 'error');
   }
 }
 

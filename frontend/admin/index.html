@@ -9,6 +9,14 @@
     body { font-family: 'Poppins', system-ui, -apple-system, sans-serif; }
   </style>
   <style>
+    /* Admin toast custom styles */
+    #admin-toast { pointer-events: auto; }
+    #admin-toast-card { min-width: 320px; max-width: 420px; box-shadow: 0 8px 30px rgba(0,0,0,0.45); }
+    #admin-toast .hidden { display: none !important; }
+    #admin-toast { transition: transform 200ms ease, opacity 200ms ease; transform: translateY(6px); opacity: 0; }
+    #admin-toast:not(.hidden) { transform: translateY(0); opacity: 1; }
+  </style>
+  <style>
     /* Transições suaves para troca de seções no painel */
     .section {
       transition: opacity 220ms ease, transform 220ms ease;
@@ -240,5 +248,17 @@
   </div>
 
   <script src="app.js"></script>
+  <!-- Admin toast (substitui alert()) -->
+  <div id="admin-toast" class="fixed bottom-6 right-6 z-60 hidden max-w-sm">
+    <div id="admin-toast-card" class="bg-gray-900 text-white rounded-lg shadow-lg p-4 flex items-start gap-3">
+      <div id="admin-toast-icon" class="mt-1"></div>
+      <div class="flex-1">
+        <div id="admin-toast-message" class="text-sm"></div>
+      </div>
+      <div class="flex items-center">
+        <button id="admin-toast-ok" class="ml-3 bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded">OK</button>
+      </div>
+    </div>
+  </div>
 </body>
 </html>

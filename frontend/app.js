@@ -1216,10 +1216,16 @@ function completePixPayment(order) {
             const hh = String(d.getHours()).padStart(2, '0');
             const min = String(d.getMinutes()).padStart(2, '0');
             const ss = String(d.getSeconds()).padStart(2, '0');
-            dateTimeStr = ` ${dd}/${MM}/${yyyy} - ${hh}:${min}:${ss}`;
+            dateTimeStr = `\nData/Hora: ${dd}/${MM}/${yyyy} - ${hh}:${min}:${ss}`;
           }
         } catch (e) { /* ignore */ }
-        const texto = `✅ Pagamento Confirmado!\\n\\nPedido: ${order.id}\\nTotal: R$ ${parseFloat(order.total).toFixed(2)}${dateTimeStr}\\n\\nChave PIX: ${brcode}`;
+
+        const cliente = order.customer_name || order.name || order.client_name || '-';
+        const telefone = order.customer_phone || order.phone || order.mobile || '-';
+        const endereco = order.delivery_address || order.address || '-';
+        const itensList = (order.items || []).map(it => `- ${it.quantity}x ${it.name || it.product_name || ''}`).join('\n') || '-';
+
+        const texto = `✅ Pagamento Confirmado!\n\nPedido: ${order.id}\nTotal: R$ ${parseFloat(order.total).toFixed(2)}${dateTimeStr}\n\nChave PIX: ${brcode}\n\nCliente: ${cliente}\nTelefone: ${telefone}\nEndereço: ${endereco}\n\nItens:\n${itensList}\n\nObservações: ${order.notes || order.observations || '-'}\n\nObrigado!`;
         const url = `https://wa.me/5581987508211?text=${encodeURIComponent(texto)}`;
         window.open(url, '_blank');
       });
@@ -1340,22 +1346,24 @@ function showConfirmation(order) {
         const hh = String(d.getHours()).padStart(2, '0');
         const min = String(d.getMinutes()).padStart(2, '0');
         const ss = String(d.getSeconds()).padStart(2, '0');
-        dateTimeStr = ` ${dd}/${MM}/${yyyy} - ${hh}:${min}:${ss}`;
+        dateTimeStr = `\nData/Hora: ${dd}/${MM}/${yyyy} - ${hh}:${min}:${ss}`;
       }
-      
+
+      const cliente = order.customer_name || order.name || order.client_name || '-';
+      const telefone = order.customer_phone || order.phone || order.mobile || '-';
+      const endereco = order.delivery_address || order.address || '-';
+      const itensList = (order.items || []).map(it => `- ${it.quantity}x ${it.name || it.product_name || ''}`).join('\n') || '-';
+
       // Adaptar mensagem conforme forma de pagamento
       let texto;
       if (order.payment_method === 'credit_card') {
-        // Mensagem para pagamento em cartão
-        texto = `✅ Pedido Realizado!\\n\\nPedido: ${order.id}\\nTotal: R$ ${parseFloat(order.total).toFixed(2)}${dateTimeStr}\\n\\nAtençao: Pagamento com cartão será coletado na entrega.\\n\\nOlá, segue meu pedido para entrega. Aguardo!`;
+        texto = `✅ Pedido Realizado!\n\nPedido: ${order.id}\nTotal: R$ ${parseFloat(order.total).toFixed(2)}${dateTimeStr}\n\nAtenção: Pagamento com cartão será coletado na entrega.\n\nCliente: ${cliente}\nTelefone: ${telefone}\nEndereço: ${endereco}\n\nItens:\n${itensList}\n\nObservações: ${order.notes || order.observations || '-'}\n\nObrigado!`;
       } else if (order.payment_method === 'pix') {
-        // Mensagem para PIX
-        texto = `✅ Pagamento Confirmado!\\n\\nPedido: ${order.id}\\nTotal: R$ ${parseFloat(order.total).toFixed(2)}${dateTimeStr}\\n\\nOlá, segue meu pedido confirmado e pago. Aguardo a entrega!`;
+        texto = `✅ Pagamento Confirmado!\n\nPedido: ${order.id}\nTotal: R$ ${parseFloat(order.total).toFixed(2)}${dateTimeStr}\n\nCliente: ${cliente}\nTelefone: ${telefone}\nEndereço: ${endereco}\n\nItens:\n${itensList}\n\nObservações: ${order.notes || order.observations || '-'}\n\nChave PIX: ${order.payment?.qr_code || order.payment?.qrCode || ''}\n\nObrigado!`;
       } else {
-        // Mensagem genérica
-        texto = `✅ Pedido Realizado!\\n\\nPedido: ${order.id}\\nTotal: R$ ${parseFloat(order.total).toFixed(2)}${dateTimeStr}\\n\\nOlá, segue meu pedido. Aguardo a entrega!`;
+        texto = `✅ Pedido Realizado!\n\nPedido: ${order.id}\nTotal: R$ ${parseFloat(order.total).toFixed(2)}${dateTimeStr}\n\nCliente: ${cliente}\nTelefone: ${telefone}\nEndereço: ${endereco}\n\nItens:\n${itensList}\n\nObservações: ${order.notes || order.observations || '-'}\n\nObrigado!`;
       }
-      
+
       const url = `https://wa.me/5581987508211?text=${encodeURIComponent(texto)}`;
       window.open(url, '_blank');
     }, { once: true }); // Executar apenas uma vez

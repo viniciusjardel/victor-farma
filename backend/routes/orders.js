@@ -247,7 +247,7 @@ module.exports = (pool) => {
       const { orderId } = req.params;
       const { status } = req.body;
 
-      const validStatuses = ['pending', 'confirmed', 'preparing', 'out_for_delivery', 'delivered', 'cancelled'];
+      const validStatuses = ['pending', 'confirmed', 'preparing', 'out_for_delivery', 'delivered', 'entregue', 'cancelled'];
       if (!validStatuses.includes(status)) {
         return res.status(400).json({ error: 'Status inválido' });
       }
@@ -271,9 +271,9 @@ module.exports = (pool) => {
         [status, orderId]
       );
 
-      // Se mudou para 'confirmed' ou 'delivered' (e não era antes), adicionar à receita
-      if ((status === 'confirmed' || status === 'delivered') && 
-          (currentOrderStatus !== 'confirmed' && currentOrderStatus !== 'delivered')) {
+        // Se mudou para 'confirmed' ou 'delivered'/'entregue' (e não era antes), adicionar à receita
+        if ((status === 'confirmed' || status === 'delivered' || status === 'entregue') && 
+          (currentOrderStatus !== 'confirmed' && currentOrderStatus !== 'delivered' && currentOrderStatus !== 'entregue')) {
         
         try {
           // Verificar se já existe receita para este pedido

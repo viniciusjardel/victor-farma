@@ -33,11 +33,14 @@ async function createPayment(paymentData) {
     throw new Error('MP_ACCESS_TOKEN não configurado. Configure a variável de ambiente no Render.');
   }
 
+  const idempotencyKey = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+
   const response = await fetch(`${MP_API_BASE}/payments`, {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${MP_ACCESS_TOKEN}`,
       'Content-Type': 'application/json',
+      'X-Idempotency-Key': idempotencyKey
     },
     body: JSON.stringify(paymentData)
   });

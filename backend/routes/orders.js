@@ -160,10 +160,23 @@ module.exports = (pool) => {
       }
 
       // Chamar PIX service para gerar novo PIX
-      const pixResponse = await axios.post('https://pix-victor-farma.onrender.com/pix', {
-        valor: parseFloat(order.total),
-        descricao: `Pedido #${orderId.slice(0, 8)}`
-      });
+      let pixResponse;
+      try {
+        pixResponse = await axios.post('https://pix-victor-farma.onrender.com/pix', {
+          valor: parseFloat(order.total),
+          descricao: `Pedido #${orderId.slice(0, 8)}`
+        });
+      } catch (error) {
+        // Erro ao chamar serviço PIX
+        console.error('❌ Erro ao chamar serviço PIX:', error.message);
+        console.error('📍 URL: https://pix-victor-farma.onrender.com/pix');
+        console.error('💡 Verifique se o serviço está online e se MP_ACCESS_TOKEN está configurado');
+        return res.status(503).json({ 
+          error: 'Serviço de PIX indisponível',
+          details: error.message,
+          message: 'Configure MP_ACCESS_TOKEN no serviço pix-victor-farma.onrender.com'
+        });
+      }
 
       // Salvar payment_id e qr_code no banco
       const updateResult = await pool.query(

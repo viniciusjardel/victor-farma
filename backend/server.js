@@ -44,6 +44,25 @@ pool.query(`
   console.error('⚠️ Erro ao criar tabela de receita:', err);
 });
 
+// Adicionar coluna payment_status se não existir
+pool.query(`
+  ALTER TABLE orders
+  ADD COLUMN IF NOT EXISTS payment_status VARCHAR(50) DEFAULT 'pendente';
+`).then(() => {
+  console.log('✅ Coluna payment_status verificada/criada');
+}).catch((err) => {
+  console.error('⚠️ Erro ao adicionar coluna payment_status:', err);
+});
+
+// Criar índice para payment_status
+pool.query(`
+  CREATE INDEX IF NOT EXISTS idx_orders_payment_status ON orders(payment_status);
+`).then(() => {
+  console.log('✅ Índice de payment_status verificado/criado');
+}).catch((err) => {
+  console.error('⚠️ Erro ao criar índice:', err);
+});
+
 // Routes
 const productRoutes = require('./routes/products');
 const cartRoutes = require('./routes/cart');

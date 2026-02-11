@@ -20,6 +20,11 @@ const pool = new Pool({
   ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
 });
 
+console.log('🔌 Conectando ao banco de dados...');
+console.log('📌 NODE_ENV:', process.env.NODE_ENV);
+console.log('📌 DATABASE_URL:', process.env.DATABASE_URL ? '✅ Configurado' : '❌ NÃO configurado');
+console.log('📌 PIX_API_URL:', process.env.PIX_API_URL);
+
 // Inicializar tabelas se não existirem
 pool.query(`
   CREATE TABLE IF NOT EXISTS revenue (

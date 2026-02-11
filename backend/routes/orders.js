@@ -2,7 +2,6 @@ const express = require('express');
 const router = express.Router();
 const { v4: uuidv4 } = require('uuid');
 const axios = require('axios');
-const generatePixMock = require('../utils/generatePixMock');
 
 module.exports = (pool) => {
   // Criar pedido
@@ -160,19 +159,22 @@ module.exports = (pool) => {
         });
       }
 
-      // Chamar PIX service para gerar novo PIX
+      // Chamar PIX service para gerar novo PIX (API REAL OBRIGATÓRIA)
       let pixResponse;
       try {
-        pixResponse = await axios.post('https://pix-victor-farma.onrender.com/pix', {
+        const PIX_SERVICE_URL = process.env.PIX_API_URL || 'https://pix-victor-farma.onrender.com';
+        pixResponse = await axios.post(`${PIX_SERVICE_URL}/pix`, {
           valor: parseFloat(order.total),
           descricao: `Pedido #${orderId.slice(0, 8)}`
-        }, { timeout: 5000 });
-        console.log('✅ PIX gerado do serviço remoto');
+        }, { timeout: 10000 });
+        console.log('✅ PIX gerado do serviço Mercado Pago real');
       } catch (error) {
-        // Fallback: Usar PIX Mock para testes
-        console.warn('⚠️ Serviço PIX indisponível, usando Mock:', error.message);
-        pixResponse = generatePixMock(parseFloat(order.total), orderId);
-        console.log('🎭 Usando PIX Mock para pedido:', orderId);
+        console.error('❌ ERRO CRÍTICO: Não foi possível gerar PIX real via Mercado Pago:', error.message);
+        console.error('   Verifique se:');
+        console.error('   1. PIX_API_URL está configurado no Render');
+        console.error('   2. Serviço backend-pix está rodando (https://pix-victor-farma.onrender.com)');
+        console.error('   3. MP_ACCESS_TOKEN está configurado no backend-pix');
+        throw new Error('Serviço PIX indisponível. Não é possível gerar pagamento.');
       }
 
       // Salvar payment_id e qr_code no banco
@@ -548,13 +550,3 @@ module.exports = (pool) => {
 
   return router;
 };
-
-// Função para gerar QR Code PIX (simulado - em produção usar biblioteca real)
-function generatePixQRCode(amount, orderId) {
-  // Simulação de QR Code
-  return {
-    qrCodeUrl: `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=00020126580014br.gov.bcb.brcode01051.0.063047052025502${orderId}5204000053039865406${amount.toFixed(2)}5802BR5913VICTOR FARMA6009SAO PAULO62410503***63047D91`,
-    amount: amount,
-    orderId: orderId
-  };
-}

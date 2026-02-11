@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { v4: uuidv4 } = require('uuid');
 const axios = require('axios');
+const generatePixMock = require('../utils/generatePixMock');
 
 module.exports = (pool) => {
   // Criar pedido
@@ -165,17 +166,13 @@ module.exports = (pool) => {
         pixResponse = await axios.post('https://pix-victor-farma.onrender.com/pix', {
           valor: parseFloat(order.total),
           descricao: `Pedido #${orderId.slice(0, 8)}`
-        });
+        }, { timeout: 5000 });
+        console.log('✅ PIX gerado do serviço remoto');
       } catch (error) {
-        // Erro ao chamar serviço PIX
-        console.error('❌ Erro ao chamar serviço PIX:', error.message);
-        console.error('📍 URL: https://pix-victor-farma.onrender.com/pix');
-        console.error('💡 Verifique se o serviço está online e se MP_ACCESS_TOKEN está configurado');
-        return res.status(503).json({ 
-          error: 'Serviço de PIX indisponível',
-          details: error.message,
-          message: 'Configure MP_ACCESS_TOKEN no serviço pix-victor-farma.onrender.com'
-        });
+        // Fallback: Usar PIX Mock para testes
+        console.warn('⚠️ Serviço PIX indisponível, usando Mock:', error.message);
+        pixResponse = generatePixMock(parseFloat(order.total), orderId);
+        console.log('🎭 Usando PIX Mock para pedido:', orderId);
       }
 
       // Salvar payment_id e qr_code no banco

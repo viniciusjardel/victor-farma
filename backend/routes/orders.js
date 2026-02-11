@@ -81,7 +81,7 @@ module.exports = (pool) => {
       // 🔄 Se tem payment_id, consultar status real da API PIX (Mercado Pago)
       if (order.payment_id) {
         try {
-          const PIX_API_URL = process.env.PIX_API_URL || 'https://pix-project.onrender.com';
+          const PIX_API_URL = process.env.PIX_API_URL || 'https://pix-victor-farma.onrender.com';
           const pixResponse = await axios.get(`${PIX_API_URL}/status/${order.payment_id}`);
           
           console.log(`📊 Status do Mercado Pago para ${order.payment_id}:`, pixResponse.data.status);
@@ -160,7 +160,7 @@ module.exports = (pool) => {
       }
 
       // Chamar PIX service para gerar novo PIX
-      const pixResponse = await axios.post('https://pix-project.onrender.com/pix', {
+      const pixResponse = await axios.post('https://pix-victor-farma.onrender.com/pix', {
         valor: parseFloat(order.total),
         descricao: `Pedido #${orderId.slice(0, 8)}`
       });

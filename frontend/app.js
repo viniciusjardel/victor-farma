@@ -445,6 +445,10 @@ function openQuantityModal(productId) {
 
   // Abrir modal
   const quantityModal = document.getElementById('quantity-modal');
+  if (!quantityModal) {
+    console.error('❌ Elemento quantity-modal não encontrado no DOM');
+    return;
+  }
   quantityModal.classList.remove('hidden');
 }
 

@@ -28,11 +28,14 @@ module.exports = (pool) => {
       const orderId = uuidv4();
       const createdAt = new Date().toISOString();
       
+      // Definir status de pagamento conforme método
+      const paymentStatus = paymentMethod === 'pix' ? 'confirmado' : 'pendente';
+      
       const orderResult = await pool.query(
-        `INSERT INTO orders (id, user_id, customer_name, customer_phone, delivery_address, total, payment_method, status, created_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        `INSERT INTO orders (id, user_id, customer_name, customer_phone, delivery_address, total, payment_method, status, payment_status, created_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
          RETURNING *`,
-        [orderId, userId, customerName, customerPhone, deliveryAddress, total, paymentMethod, 'pending', createdAt]
+        [orderId, userId, customerName, customerPhone, deliveryAddress, total, paymentMethod, 'preparando', paymentStatus, createdAt]
       );
 
       // Adicionar itens do pedido (SEM decrementar estoque ainda)
@@ -208,19 +211,25 @@ module.exports = (pool) => {
         return res.status(400).json({ error: 'Dados inválidos' });
       }
 
-      // Atualizar status do pagamento no pedido usando orderId
+      // Mapear status do Mercado Pago para payment_status
+      let paymentStatus = 'pendente';
+      if (status === 'approved') {
+        paymentStatus = 'confirmado';
+      }
+
+      // Atualizar apenas payment_status e payment_id (não alterar status do pedido)
       const updateResult = await pool.query(
-        'UPDATE orders SET payment_status = $1, status = $2, payment_id = $3 WHERE id = $4 RETURNING *',
-        [status, status === 'approved' ? 'confirmed' : 'pending', paymentId, orderId]
+        'UPDATE orders SET payment_status = $1, payment_id = $2 WHERE id = $3 RETURNING *',
+        [paymentStatus, paymentId, orderId]
       );
 
       if (updateResult.rows.length === 0) {
         console.warn(`Webhook: Pedido com ID ${orderId} não encontrado`);
-        return res.json({ message: 'Processado' }); // Não retorna erro pro webhook
+        return res.json({ message: 'Processado' });
       }
 
       const order = updateResult.rows[0];
-      console.log(`✅ Webhook PIX: Pedido ${orderId} atualizado para status=${order.status}, payment_status=${order.payment_status}`);
+      console.log(`✅ Webhook PIX: Pedido ${orderId} - payment_status atualizado para: ${paymentStatus}`);
 
       // 📦 Se pagamento foi aprovado, decrementar estoque
       if (status === 'approved') {
@@ -546,6 +555,74 @@ module.exports = (pool) => {
     } catch (error) {
       console.error('Erro ao deletar todos os pedidos:', error);
       res.status(500).json({ error: 'Erro ao deletar pedidos' });
+    }
+  });
+
+  // Atualizar status do pedido (admin)
+  router.patch('/:orderId/status-pedido', async (req, res) => {
+    try {
+      const { orderId } = req.params;
+      const { novoStatus } = req.body;
+
+      const statusValidos = ['preparando', 'em rota de entrega', 'entregue', 'pedido cancelado'];
+      if (!statusValidos.includes(novoStatus)) {
+        return res.status(400).json({ 
+          error: 'Status inválido',
+          statusValidos
+        });
+      }
+
+      const result = await pool.query(
+        'UPDATE orders SET status = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2 RETURNING *',
+        [novoStatus, orderId]
+      );
+
+      if (result.rows.length === 0) {
+        return res.status(404).json({ error: 'Pedido não encontrado' });
+      }
+
+      console.log(`✅ Status do pedido ${orderId} atualizado para: ${novoStatus}`);
+      res.json({
+        message: 'Status do pedido atualizado com sucesso',
+        pedido: result.rows[0]
+      });
+    } catch (error) {
+      console.error('Erro ao atualizar status do pedido:', error);
+      res.status(500).json({ error: 'Erro ao atualizar status do pedido' });
+    }
+  });
+
+  // Atualizar status de pagamento (admin)
+  router.patch('/:orderId/payment-status', async (req, res) => {
+    try {
+      const { orderId } = req.params;
+      const { novoStatus } = req.body;
+
+      const statusValidos = ['confirmado', 'pendente', 'pedido cancelado'];
+      if (!statusValidos.includes(novoStatus)) {
+        return res.status(400).json({ 
+          error: 'Status de pagamento inválido',
+          statusValidos
+        });
+      }
+
+      const result = await pool.query(
+        'UPDATE orders SET payment_status = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2 RETURNING *',
+        [novoStatus, orderId]
+      );
+
+      if (result.rows.length === 0) {
+        return res.status(404).json({ error: 'Pedido não encontrado' });
+      }
+
+      console.log(`✅ Status de pagamento do pedido ${orderId} atualizado para: ${novoStatus}`);
+      res.json({
+        message: 'Status de pagamento atualizado com sucesso',
+        pedido: result.rows[0]
+      });
+    } catch (error) {
+      console.error('Erro ao atualizar status de pagamento:', error);
+      res.status(500).json({ error: 'Erro ao atualizar status de pagamento' });
     }
   });
 

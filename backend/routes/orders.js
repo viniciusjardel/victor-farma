@@ -188,8 +188,13 @@ module.exports = (pool) => {
       });
 
     } catch (error) {
-      console.error('Erro ao gerar PIX:', error.message);
-      res.status(500).json({ error: 'Erro ao gerar PIX' });
+      console.error('❌ Erro ao gerar PIX:', error.message);
+      console.error('Stack:', error.stack);
+      res.status(500).json({ 
+        error: 'Erro ao gerar PIX',
+        details: error.message,
+        hint: 'Verifique se o serviço backend-pix está rodando e se MP_ACCESS_TOKEN está configurado'
+      });
     }
   });
 

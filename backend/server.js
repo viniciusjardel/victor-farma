@@ -10,6 +10,10 @@ const PORT = process.env.PORT || 3000;
 app.use(cors());
 app.use(express.json());
 
+// Servir arquivos estáticos do frontend
+const path = require('path');
+app.use(express.static(path.join(__dirname, '../frontend')));
+
 // Database connection
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,

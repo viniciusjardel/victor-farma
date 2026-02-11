@@ -402,7 +402,7 @@ function displayOrders(orders) {
   }
 
   tbody.innerHTML = orders.map(order => {
-    const date = new Date(order.created_at).toLocaleDateString('pt-BR');
+    const dateTime = new Date(order.created_at).toLocaleString('pt-BR');
     const statusColors = {
       'pending': 'bg-yellow-100 text-yellow-800',
       'confirmed': 'bg-blue-100 text-blue-800',
@@ -418,7 +418,7 @@ function displayOrders(orders) {
         <td class="px-6 py-4 text-gray-700">${order.customer_phone}</td>
         <td class="px-6 py-4 font-bold text-red-600">R$ ${parseFloat(order.total).toFixed(2)}</td>
         <td class="px-6 py-4"><span class="px-2 py-1 rounded-full text-xs font-bold ${statusColors[order.status] || 'bg-gray-100 text-gray-800'}">${getStatusLabel(order.status)}</span></td>
-        <td class="px-6 py-4 text-gray-700">${date}</td>
+        <td class="px-6 py-4 text-gray-700">${dateTime}</td>
         <td class="px-6 py-4 flex gap-2">
           <button class="px-3 py-1 bg-blue-500 hover:bg-blue-600 text-white text-xs rounded font-semibold transition-colors" onclick="openOrderModal('${order.id}')">Ver</button>
           <button class="px-3 py-1 bg-green-600 hover:bg-green-700 text-white text-xs rounded font-semibold transition-colors" onclick="openStatusModal('${order.id}')">Atualizar</button>
@@ -454,7 +454,7 @@ async function openOrderModal(orderId) {
     const items = data.items;
 
     const content = document.getElementById('order-modal-content');
-    const date = new Date(order.created_at).toLocaleDateString('pt-BR');
+    const dateTime = new Date(order.created_at).toLocaleString('pt-BR');
     const statusColors = {
       'pending': 'bg-yellow-100 text-yellow-800',
       'confirmed': 'bg-blue-100 text-blue-800',
@@ -479,8 +479,8 @@ async function openOrderModal(orderId) {
           <div class="text-lg font-bold text-gray-900">${order.customer_phone}</div>
         </div>
         <div>
-          <div class="text-xs text-gray-600 font-semibold uppercase">Data</div>
-          <div class="text-lg font-bold text-gray-900">${date}</div>
+          <div class="text-xs text-gray-600 font-semibold uppercase">Data e Hora</div>
+          <div class="text-lg font-bold text-gray-900">${dateTime}</div>
         </div>
         <div>
           <div class="text-xs text-gray-600 font-semibold uppercase">Status</div>

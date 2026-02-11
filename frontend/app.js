@@ -122,6 +122,24 @@ document.querySelectorAll('.modal').forEach(modal => {
   });
 });
 
+// Close product image modal
+const productImageModal = document.getElementById('product-image-modal');
+const closeProductImageModalBtn = document.getElementById('close-product-image-modal');
+if (closeProductImageModalBtn) {
+  closeProductImageModalBtn.addEventListener('click', () => {
+    productImageModal.classList.add('hidden');
+  });
+}
+
+// Fechar modal de imagem ao clicar fora
+if (productImageModal) {
+  productImageModal.addEventListener('click', (e) => {
+    if (e.target === productImageModal) {
+      productImageModal.classList.add('hidden');
+    }
+  });
+}
+
 // Inicializar
 document.addEventListener('DOMContentLoaded', () => {
   loadProducts();
@@ -342,8 +360,8 @@ function displayProducts(productsToDisplay) {
   console.log('📦 Renderizando', productsToDisplay.length, 'produtos');
   productsContainer.innerHTML = productsToDisplay.map(product => `
     <div class="bg-white rounded-lg shadow hover:shadow-lg product-card overflow-hidden flex flex-col" data-product-id="${product.id}">
-      <div class="bg-gradient-to-br from-green-100 to-green-50 h-32 sm:h-40 flex items-center justify-center overflow-hidden">
-        ${product.image_url ? `<img id="product-img-${product.id}" src="${product.image_url}" alt="${product.name}" class="w-full h-full object-cover product-image-el">` : '<span class="text-gray-400 text-sm text-center px-2">Sem imagem</span>'}
+      <div class="bg-gradient-to-br from-green-100 to-green-50 h-32 sm:h-40 flex items-center justify-center overflow-hidden cursor-pointer" onclick="openProductImageModal('${product.id}')">
+        ${product.image_url ? `<img id="product-img-${product.id}" src="${product.image_url}" alt="${product.name}" class="w-full h-full object-contain product-image-el">` : '<span class="text-gray-400 text-sm text-center px-2">Sem imagem</span>'}
       </div>
       <div class="p-3 flex-1 flex flex-col justify-between">
         <div>
@@ -364,6 +382,35 @@ function displayProducts(productsToDisplay) {
   `).join('');
 }
 
+// Abrir modal com imagem ampliada do produto
+function openProductImageModal(productId) {
+  const product = products.find(p => p.id === productId);
+  if (!product) return;
+
+  // Preencher os dados do modal
+  document.getElementById('modal-product-image').src = product.image_url || '';
+  document.getElementById('modal-product-name').textContent = product.name;
+  document.getElementById('modal-product-description').textContent = product.description || 'Sem descrição disponível';
+  document.getElementById('modal-product-price').textContent = `R$ ${parseFloat(product.price).toFixed(2)}`;
+  document.getElementById('modal-product-stock').textContent = `${product.stock} un.`;
+
+  // Configurar botão de adicionar
+  const addBtn = document.getElementById('modal-add-to-cart-btn');
+  addBtn.onclick = () => addToCartFromModal(productId);
+  addBtn.disabled = product.stock === 0;
+  addBtn.classList.toggle('bg-gray-400', product.stock === 0);
+  addBtn.classList.toggle('cursor-not-allowed', product.stock === 0);
+
+  // Abrir modal
+  productImageModal.classList.remove('hidden');
+}
+
+// Adicionar ao carrinho a partir do modal e fechar
+async function addToCartFromModal(productId) {
+  openQuantityModal(productId);
+  productImageModal.classList.add('hidden');
+}
+
 // Filtrar produtos
 function filterProducts() {
   const searchTerm = searchInput.value.toLowerCase();
@@ -379,10 +426,194 @@ function filterProducts() {
   displayProducts(filtered);
 }
 
-// Adicionar ao carrinho
-async function addToCart(productId) {
-  // Animação: clonar imagem do produto e mover para o botão do carrinho
+// ==================== MODAL DE QUANTIDADE ====================
+
+let selectedProductForQuantity = null;
+
+// Abrir modal de quantidade
+function openQuantityModal(productId) {
+  const product = products.find(p => p.id === productId);
+  if (!product) return;
+
+  selectedProductForQuantity = productId;
+
+  // Preencher dados do modal
+  document.getElementById('quantity-product-name').textContent = product.name;
+  document.getElementById('qty-input').value = '1';
+  document.getElementById('qty-input').max = product.stock;
+  document.getElementById('qty-unit-price').textContent = `R$ ${parseFloat(product.price).toFixed(2)}`;
+  updateQuantityPrice(product.price);
+
+  // Abrir modal
+  const quantityModal = document.getElementById('quantity-modal');
+  quantityModal.classList.remove('hidden');
+}
+
+// Atualizar preço total no modal de quantidade
+function updateQuantityPrice(unitPrice) {
+  const qty = parseInt(document.getElementById('qty-input').value) || 1;
+  const total = qty * parseFloat(unitPrice);
+  document.getElementById('qty-total-price').textContent = `R$ ${total.toFixed(2)}`;
+}
+
+// Listener para o campo de quantidade
+if (document.getElementById('qty-input')) {
+  document.getElementById('qty-input').addEventListener('input', function() {
+    const maxStock = parseInt(this.max);
+    let value = parseInt(this.value);
+    const product = products.find(p => p.id === selectedProductForQuantity);
+    
+    // Se o valor for maior que o máximo, corrige e avisa
+    if (value > maxStock) {
+      this.value = maxStock;
+      value = maxStock;
+      
+      if (product) {
+        const units = maxStock === 1 ? 'unidade' : 'unidades';
+        notify.warning(`Ajustado para ${maxStock} ${units} (máximo disponível de "${product.name}")`);
+      }
+    }
+    
+    // Se for menor que 1, corrige
+    if (value < 1) {
+      this.value = 1;
+      value = 1;
+    }
+    
+    if (product) {
+      updateQuantityPrice(product.price);
+    }
+  });
+}
+
+// Botão diminuir quantidade
+if (document.getElementById('qty-decrease-btn')) {
+  document.getElementById('qty-decrease-btn').addEventListener('click', () => {
+    const input = document.getElementById('qty-input');
+    const value = Math.max(1, parseInt(input.value) - 1);
+    input.value = value;
+    const product = products.find(p => p.id === selectedProductForQuantity);
+    if (product) {
+      updateQuantityPrice(product.price);
+    }
+  });
+}
+
+// Botão aumentar quantidade
+if (document.getElementById('qty-increase-btn')) {
+  document.getElementById('qty-increase-btn').addEventListener('click', () => {
+    console.log('🔼 Botão + clicado no modal de quantidade');
+    const input = document.getElementById('qty-input');
+    const maxStock = parseInt(input.max);
+    const currentValue = parseInt(input.value);
+    const product = products.find(p => p.id === selectedProductForQuantity);
+    
+    console.log('📊 Max stock:', maxStock, 'Current:', currentValue);
+    
+    // Se já está no máximo, avisar
+    if (currentValue >= maxStock) {
+      console.log('⚠️ Limite de estoque atingido! Mostrando notificação...');
+      const msg = 'limite de estoque atingido, não é possivel adicionar mais unidades';
+      if (window.notify && typeof window.notify.warning === 'function') {
+        window.notify.warning(msg);
+      } else {
+        console.error('❌ notify não está disponível, usando alert');
+        alert(msg);
+      }
+      return;
+    }
+    
+    const value = Math.min(maxStock, currentValue + 1);
+    input.value = value;
+    if (product) {
+      updateQuantityPrice(product.price);
+    }
+  });
+}
+
+// Fechar modal de quantidade
+const quantityModal = document.getElementById('quantity-modal');
+const closeQuantityModalBtn = document.getElementById('close-quantity-modal');
+const cancelQuantityBtn = document.getElementById('cancel-quantity-btn');
+
+if (closeQuantityModalBtn) {
+  closeQuantityModalBtn.addEventListener('click', () => {
+    quantityModal.classList.add('hidden');
+  });
+}
+
+if (cancelQuantityBtn) {
+  cancelQuantityBtn.addEventListener('click', () => {
+    quantityModal.classList.add('hidden');
+  });
+}
+
+// Confirmar quantidade e adicionar ao carrinho
+const confirmQuantityBtn = document.getElementById('confirm-quantity-btn');
+if (confirmQuantityBtn) {
+  confirmQuantityBtn.addEventListener('click', async () => {
+    let quantity = parseInt(document.getElementById('qty-input').value) || 1;
+    const product = products.find(p => p.id === selectedProductForQuantity);
+    
+    if (!product) {
+      notify.error('Produto não encontrado');
+      return;
+    }
+
+    // Validar se a quantidade é maior que o estoque
+    if (quantity > product.stock) {
+      const units = product.stock === 1 ? 'unidade' : 'unidades';
+      
+      // Ajustar automaticamente para o máximo disponível
+      quantity = product.stock;
+      document.getElementById('qty-input').value = quantity;
+      updateQuantityPrice(product.price);
+      
+      notify.warning(`Desculpe, só temos ${product.stock} ${units} disponíveis de "${product.name}". Quantidade ajustada automaticamente.`);
+      return;
+    }
+
+    // Fechar modal
+    quantityModal.classList.add('hidden');
+
+    // Adicionar ao carrinho com animação
+    await addToCartWithQuantity(selectedProductForQuantity, quantity);
+  });
+}
+
+// Adicionar ao carrinho com quantidade (com animação)
+async function addToCartWithQuantity(productId, quantity) {
   try {
+    // Validação de segurança: garantir que a quantidade não ultrapassa o estoque
+    const product = products.find(p => p.id === productId);
+    if (!product) {
+      notify.error('Produto não encontrado no catálogo');
+      return;
+    }
+
+    if (quantity <= 0 || !Number.isInteger(quantity)) {
+      notify.error('Quantidade inválida');
+      return;
+    }
+
+    // Verificar se há quantidade já no carrinho deste produto
+    const cartItem = cart.find(item => item.product_id === productId);
+    const quantityInCart = cartItem ? cartItem.quantity : 0;
+    const totalQuantity = quantityInCart + quantity;
+
+    // Validar contra o estoque
+    if (totalQuantity > product.stock) {
+      const available = Math.max(0, product.stock - quantityInCart);
+      const units = available === 1 ? 'unidade' : 'unidades';
+      
+      if (available === 0) {
+        notify.error(`Produto "${product.name}" está fora de estoque`);
+      } else {
+        notify.error(`Desculpe, só temos ${available} ${units} disponíveis de "${product.name}"`);
+      }
+      return;
+    }
+
     const img = document.getElementById(`product-img-${productId}`);
     if (img) {
       const imgRect = img.getBoundingClientRect();
@@ -419,41 +650,64 @@ async function addToCart(productId) {
       });
     }
 
-    // Após animação, chamar API para adicionar ao carrinho
+    // Fazer o fetch para adicionar ao carrinho com a quantidade
+    console.log(`📤 Enviando ao carrinho: productId=${productId}, quantity=${quantity}`);
     const response = await fetch(`${API_URL}/cart/${userId}/add`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ productId, quantity: 1 })
+      body: JSON.stringify({ productId, quantity })
     });
 
+    console.log(`📥 Resposta API: ${response.status} ${response.statusText}`);
+
     if (!response.ok) {
-      const error = await response.json();
-      notify.error(error.error || 'Erro ao adicionar ao carrinho');
+      let errorMsg = 'Erro ao adicionar ao carrinho';
+      try {
+        const error = await response.json();
+        errorMsg = error.error || error.message || errorMsg;
+        console.error('❌ Erro da API:', error);
+      } catch (e) {
+        console.error('❌ Erro ao processar resposta:', response.status, response.statusText);
+      }
+      notify.error(errorMsg);
       return;
     }
 
     // Atualizar carrinho
     await loadCart();
 
-    // Animar mensagem saindo de dentro do carrinho para o centro da tela
-    const product = products.find(p => p.id === productId) || { name: 'Produto' };
-    animateCartMessage(`✓ ${product.name} adicionado ao carrinho`);
+    // Animar mensagem
+    const productName = product ? product.name : 'Produto';
+    const plural = quantity > 1 ? 'itens' : 'item';
+    animateCartMessage(`✓ ${quantity} ${plural} de ${productName} adicionados ao carrinho`);
 
   } catch (error) {
-    console.error('Erro ao adicionar ao carrinho:', error);
+    console.error('❌ Erro ao adicionar ao carrinho:', error);
     notify.error('Erro ao adicionar ao carrinho');
   }
 }
 
-// Carregar carrinho
+// Adicionar ao carrinho - abre modal de quantidade
+function addToCart(productId) {
+  openQuantityModal(productId);
+}
+
+// Carrinho
 async function loadCart() {
   try {
+    console.log(`📦 Carregando carrinho do usuário: ${userId}`);
     const response = await fetch(`${API_URL}/cart/${userId}`);
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    }
     cart = await response.json();
+    console.log(`✅ Carrinho carregado com ${cart.length} itens`);
     updateCartDisplay();
   } catch (error) {
-    console.error('Erro ao carregar carrinho:', error);
+    console.error('❌ Erro ao carregar carrinho:', error);
+    notify.error('Erro ao carregar carrinho');
     cart = [];
+    updateCartDisplay();
   }
 }
 
@@ -473,6 +727,12 @@ function updateCartDisplay() {
 
   cartItemsDiv.innerHTML = cart.map(item => {
     total += parseFloat(item.subtotal);
+    
+    // Encontrar o estoque disponível do produto
+    const product = products.find(p => p.id === item.product_id);
+    const maxQuantity = product ? product.stock : 0;
+    const canIncrease = item.quantity < maxQuantity;
+    
     return `
       <div class="border-b py-3 px-4 hover:bg-gray-50 text-sm">
         <div class="flex justify-between items-start gap-2 mb-2">
@@ -486,7 +746,7 @@ function updateCartDisplay() {
           <div class="flex items-center gap-1 bg-gray-100 rounded">
             <button class="quantity-btn w-7 h-7 hover:bg-gray-200 text-center" onclick="updateQuantity('${item.id}', ${item.quantity - 1})">−</button>
             <span class="w-7 text-center font-bold">${item.quantity}</span>
-            <button class="quantity-btn w-7 h-7 hover:bg-gray-200 text-center" onclick="updateQuantity('${item.id}', ${item.quantity + 1})">+</button>
+            <button class="quantity-btn w-7 h-7 ${canIncrease ? 'hover:bg-gray-200' : 'bg-gray-300 cursor-not-allowed'} text-center" onclick="handleIncreaseQuantityInCart('${item.id}', ${item.quantity + 1})">+</button>
           </div>
           <div class="text-gray-700 font-semibold">R$ ${parseFloat(item.subtotal).toFixed(2)}</div>
         </div>
@@ -548,6 +808,40 @@ function animateCartMessage(text) {
   }, 1400);
 }
 
+// Aumentar quantidade no carrinho com validação e aviso
+async function handleIncreaseQuantityInCart(itemId, newQuantity) {
+  console.log('🔼 Tentativa de aumentar quantidade no carrinho:', itemId);
+  // Encontrar o item no carrinho
+  const cartItem = cart.find(item => item.id === itemId);
+  if (!cartItem) {
+    notify.error('Produto não encontrado no carrinho');
+    return;
+  }
+
+  // Encontrar o produto no catálogo para obter o estoque
+  const product = products.find(p => p.id === cartItem.product_id);
+  if (!product) {
+    notify.error('Produto não encontrado no catálogo');
+    return;
+  }
+
+  // Se já está no máximo, mostrar aviso
+  if (cartItem.quantity >= product.stock) {
+    console.log('⚠️ Limite de estoque atingido no carrinho!');
+    const msg = 'limite de estoque atingido, não é possivel adicionar mais unidades';
+    if (window.notify && typeof window.notify.warning === 'function') {
+      window.notify.warning(msg);
+    } else {
+      console.error('❌ notify não está disponível, usando alert');
+      alert(msg);
+    }
+    return;
+  }
+
+  // Senão, proceder com a atualização
+  await updateQuantity(itemId, newQuantity);
+}
+
 // Atualizar quantidade
 async function updateQuantity(itemId, newQuantity) {
   if (newQuantity <= 0) {
@@ -555,7 +849,34 @@ async function updateQuantity(itemId, newQuantity) {
     return;
   }
 
+  // Encontrar o item no carrinho para obter o ID do produto
+  const cartItem = cart.find(item => item.id === itemId);
+  if (!cartItem) {
+    notify.error('Produto não encontrado no carrinho');
+    return;
+  }
+
+  // Encontrar o produto no catálogo para obter o estoque
+  const product = products.find(p => p.id === cartItem.product_id);
+  if (!product) {
+    notify.error('Produto não encontrado no catálogo');
+    return;
+  }
+
+  // Validar se a nova quantidade excede o estoque
+  if (newQuantity > product.stock) {
+    const units = product.stock === 1 ? 'unidade' : 'unidades';
+    // Se está tentando aumentar mas já está no máximo, usar mensagem de limite
+    if (cartItem.quantity >= product.stock) {
+      notify.warning(`Limite de ${product.stock} ${units} atingido para "${product.name}"`);
+    } else {
+      notify.error(`Desculpe, só temos ${product.stock} ${units} disponíveis de ${product.name}`);
+    }
+    return;
+  }
+
   try {
+    console.log(`🔄 Atualizando quantidade: itemId=${itemId}, newQuantity=${newQuantity}`);
     const response = await fetch(`${API_URL}/cart/${userId}/item/${itemId}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
@@ -563,13 +884,16 @@ async function updateQuantity(itemId, newQuantity) {
     });
 
     if (response.ok) {
+      console.log(`✅ Quantidade atualizada com sucesso`);
       await loadCart();
       notify.info('Quantidade atualizada');
     } else {
-      notify.error('Erro ao atualizar quantidade');
+      console.error(`❌ Erro na resposta: ${response.status}`);
+      const error = await response.json().catch(() => ({}));
+      notify.error(error.error || 'Erro ao atualizar quantidade');
     }
   } catch (error) {
-    console.error('Erro:', error);
+    console.error('❌ Erro ao atualizar quantidade:', error);
     notify.error('Erro ao atualizar quantidade');
   }
 }
@@ -577,18 +901,22 @@ async function updateQuantity(itemId, newQuantity) {
 // Remover do carrinho
 async function removeFromCart(itemId) {
   try {
+    console.log(`🗑️ Removendo item do carrinho: itemId=${itemId}`);
     const response = await fetch(`${API_URL}/cart/${userId}/item/${itemId}`, {
       method: 'DELETE'
     });
 
     if (response.ok) {
+      console.log(`✅ Item removido com sucesso`);
       notify.info('Produto removido do carrinho');
-      loadCart();
+      await loadCart();
     } else {
-      notify.error('Erro ao remover item');
+      console.error(`❌ Erro na resposta: ${response.status}`);
+      const error = await response.json().catch(() => ({}));
+      notify.error(error.error || 'Erro ao remover item');
     }
   } catch (error) {
-    console.error('Erro:', error);
+    console.error('❌ Erro ao remover item:', error);
     notify.error('Erro ao remover item');
   }
 }

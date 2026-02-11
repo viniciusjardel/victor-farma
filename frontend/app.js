@@ -447,19 +447,22 @@ function openQuantityModal(productId) {
   const quantityModal = document.getElementById('quantity-modal');
   if (!quantityModal) {
     console.error('❌ Elemento quantity-modal não encontrado no DOM');
-    console.warn('⏳ Tentando aguardar carregamento completo da página...');
     
-    // Tentar novamente após 500ms (possível atraso de extensão)
-    setTimeout(() => {
+    let retries = 0;
+    const maxRetries = 5;
+    const retryInterval = setInterval(() => {
+      retries++;
       const modal = document.getElementById('quantity-modal');
       if (modal) {
         modal.classList.remove('hidden');
-        console.log('✅ Modal encontrado após retry');
-      } else {
-        console.error('❌ Modal ainda não encontrado. Desabilite extensões e faça refresh (Ctrl+Shift+R)');
-        alert('⚠️ Erro ao abrir modal de quantidade. Tente desabilitar extensões do navegador e fazer refresh.');
+        console.log(`✅ Modal encontrado após ${retries} tentativa(s)`);
+        clearInterval(retryInterval);
+      } else if (retries >= maxRetries) {
+        console.error('❌ Modal não encontrado após múltiplas tentativas. Desabilite extensões e faça F5');
+        clearInterval(retryInterval);
+        alert('⚠️ Erro ao abrir modal. Tente: 1) F5 para recarregar 2) Desabilitar extensões 3) Modo incógnito');
       }
-    }, 500);
+    }, 300);
     return;
   }
   quantityModal.classList.remove('hidden');

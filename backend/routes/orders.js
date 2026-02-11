@@ -52,12 +52,8 @@ module.exports = (pool) => {
       // Limpar carrinho
       await pool.query('DELETE FROM cart_items WHERE user_id = $1', [userId]);
 
-      // Gerar QR Code PIX (simulado)
-      const pixQRCode = generatePixQRCode(total, orderId);
-
       res.status(201).json({
         order: orderResult.rows[0],
-        pixQRCode: pixQRCode,
         message: 'Pedido criado com sucesso'
       });
     } catch (error) {

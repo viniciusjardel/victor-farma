@@ -57,8 +57,13 @@ module.exports = (pool) => {
       if (productCheck.rows.length === 0) {
         return res.status(404).json({ error: 'Produto não encontrado' });
       }
+      
+      console.log(`🛒 Validação de estoque: stock=${productCheck.rows[0].stock}, quantity=${quantity}`);
+      
       if (productCheck.rows[0].stock < quantity) {
-        return res.status(400).json({ error: 'Estoque insuficiente' });
+        const msg = `Você solicitou ${quantity} unidades, mas temos apenas ${productCheck.rows[0].stock} em estoque.`;
+        console.error(`❌ ${msg}`);
+        return res.status(400).json({ error: msg, available: productCheck.rows[0].stock, requested: quantity });
       }
 
       // Verificar se item já está no carrinho
@@ -70,8 +75,13 @@ module.exports = (pool) => {
       if (existingItem.rows.length > 0) {
         // Atualizar quantidade
         const newQuantity = existingItem.rows[0].quantity + quantity;
+        console.log(`🛒 Item já existe: oldQty=${existingItem.rows[0].quantity}, newQty=${newQuantity}, stock=${productCheck.rows[0].stock}`);
+        
         if (productCheck.rows[0].stock < newQuantity) {
-          return res.status(400).json({ error: 'Estoque insuficiente' });
+          const available = productCheck.rows[0].stock - existingItem.rows[0].quantity;
+          const msg = `Estoque insuficiente. Você já tem ${existingItem.rows[0].quantity} no carrinho. Pode adicionar apenas ${Math.max(0, available)} mais.`;
+          console.error(`❌ ${msg}`);
+          return res.status(400).json({ error: msg });
         }
         await pool.query(
           'UPDATE cart_items SET quantity = $1 WHERE id = $2',

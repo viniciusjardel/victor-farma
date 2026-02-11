@@ -373,8 +373,8 @@ function displayProducts(productsToDisplay) {
             <p class="text-lg md:text-xl font-bold text-red-600">R$ ${parseFloat(product.price).toFixed(2)}</p>
             <p class="text-xs font-semibold ${product.stock < 10 ? 'text-red-600' : 'text-gray-600'}">Est: ${product.stock}</p>
           </div>
-          <button class="add-to-cart-btn w-full ${product.stock === 0 ? 'bg-gray-400 cursor-not-allowed' : 'bg-green-600 hover:bg-green-700 btn-hover'} text-white font-bold py-2 px-3 rounded-lg text-xs md:text-sm transition-all" ${product.stock === 0 ? 'disabled' : ''} onclick="addToCart('${product.id}')">
-            ${product.stock === 0 ? '❌ Fora de estoque' : '➕ Adicionar'}
+          <button class="add-to-cart-btn w-full bg-green-600 hover:bg-green-700 btn-hover text-white font-bold py-2 px-3 rounded-lg text-xs md:text-sm transition-all" onclick="addToCart('${product.id}')">
+            ➕ Adicionar
           </button>
         </div>
       </div>
@@ -397,9 +397,8 @@ function openProductImageModal(productId) {
   // Configurar botão de adicionar
   const addBtn = document.getElementById('modal-add-to-cart-btn');
   addBtn.onclick = () => addToCartFromModal(productId);
-  addBtn.disabled = product.stock === 0;
-  addBtn.classList.toggle('bg-gray-400', product.stock === 0);
-  addBtn.classList.toggle('cursor-not-allowed', product.stock === 0);
+  addBtn.classList.remove('bg-gray-400', 'cursor-not-allowed');
+  addBtn.classList.add('bg-green-600', 'hover:bg-green-700');
 
   // Abrir modal
   productImageModal.classList.remove('hidden');
@@ -513,13 +512,8 @@ if (document.getElementById('qty-increase-btn')) {
     // Se já está no máximo, avisar
     if (currentValue >= maxStock) {
       console.log('⚠️ Limite de estoque atingido! Mostrando notificação...');
-      const msg = 'limite de estoque atingido, não é possivel adicionar mais unidades';
-      if (window.notify && typeof window.notify.warning === 'function') {
-        window.notify.warning(msg);
-      } else {
-        console.error('❌ notify não está disponível, usando alert');
-        alert(msg);
-      }
+      const msg = 'Limite de estoque atingido. Não é possível adicionar mais unidades.';
+      notify.warning(msg);
       return;
     }
     
@@ -533,23 +527,17 @@ if (document.getElementById('qty-increase-btn')) {
 
 // Fechar modal de quantidade
 const quantityModal = document.getElementById('quantity-modal');
-const closeQuantityModalBtn = document.getElementById('close-quantity-modal');
-const cancelQuantityBtn = document.getElementById('cancel-quantity-btn');
 
-if (closeQuantityModalBtn) {
-  closeQuantityModalBtn.addEventListener('click', () => {
+// Listeners para fechar modal de quantidade (usando close-modal class)
+const closeQuantityModalButtons = document.querySelectorAll('#quantity-modal .close-modal');
+closeQuantityModalButtons.forEach(btn => {
+  btn.addEventListener('click', () => {
     quantityModal.classList.add('hidden');
   });
-}
-
-if (cancelQuantityBtn) {
-  cancelQuantityBtn.addEventListener('click', () => {
-    quantityModal.classList.add('hidden');
-  });
-}
+});
 
 // Confirmar quantidade e adicionar ao carrinho
-const confirmQuantityBtn = document.getElementById('confirm-quantity-btn');
+const confirmQuantityBtn = document.getElementById('confirm-quantity-btn') || document.getElementById('qty-add-cart-btn');
 if (confirmQuantityBtn) {
   confirmQuantityBtn.addEventListener('click', async () => {
     let quantity = parseInt(document.getElementById('qty-input').value) || 1;
@@ -585,10 +573,24 @@ if (confirmQuantityBtn) {
 async function addToCartWithQuantity(productId, quantity) {
   try {
     // Validação de segurança: garantir que a quantidade não ultrapassa o estoque
-    const product = products.find(p => p.id === productId);
+    let product = products.find(p => p.id === productId);
     if (!product) {
       notify.error('Produto não encontrado no catálogo');
       return;
+    }
+
+    // 🔥 BUSCAR ESTOQUE REAL DO SERVIDOR ANTES DE ENVIAR
+    console.log(`📡 Buscando estoque atualizado do servidor para: ${productId}`);
+    try {
+      const stockResponse = await fetch(`${API_URL}/products/${productId}`);
+      if (stockResponse.ok) {
+        const updatedProduct = await stockResponse.json();
+        product.stock = updatedProduct.stock || product.stock;
+        products = products.map(p => p.id === productId ? product : p);
+        console.log(`✅ Estoque atualizado: ${product.stock}`);
+      }
+    } catch (e) {
+      console.warn('⚠️ Não conseguiu atualizar estoque, usando dados locais');
     }
 
     if (quantity <= 0 || !Number.isInteger(quantity)) {
@@ -601,7 +603,14 @@ async function addToCartWithQuantity(productId, quantity) {
     const quantityInCart = cartItem ? cartItem.quantity : 0;
     const totalQuantity = quantityInCart + quantity;
 
-    // Validar contra o estoque
+    console.log(`📊 Validação de estoque:
+    - Produto: ${product.name}
+    - Estoque total: ${product.stock}
+    - Quantidade no carrinho: ${quantityInCart}
+    - Quantidade a adicionar: ${quantity}
+    - Total será: ${totalQuantity}`);
+
+    // Validar contra o estoque - RIGOROSO
     if (totalQuantity > product.stock) {
       const available = Math.max(0, product.stock - quantityInCart);
       const units = available === 1 ? 'unidade' : 'unidades';
@@ -611,6 +620,13 @@ async function addToCartWithQuantity(productId, quantity) {
       } else {
         notify.error(`Desculpe, só temos ${available} ${units} disponíveis de "${product.name}"`);
       }
+      return;
+    }
+
+    // 🔥 PROTEÇÃO EXTRA: Não enviar se totalQuantity > stock
+    if (totalQuantity > product.stock) {
+      console.error(`❌ BLOQUEADO: totalQuantity (${totalQuantity}) > stock (${product.stock})`);
+      notify.error('Erro: quantidade solicitada ultrapassa o estoque');
       return;
     }
 
@@ -662,14 +678,27 @@ async function addToCartWithQuantity(productId, quantity) {
 
     if (!response.ok) {
       let errorMsg = 'Erro ao adicionar ao carrinho';
+      let available = null;
       try {
         const error = await response.json();
         errorMsg = error.error || error.message || errorMsg;
+        available = error.available;
         console.error('❌ Erro da API:', error);
+        console.error('📊 Detalhes do erro:', JSON.stringify(error, null, 2));
+        if (available !== null) {
+          console.error(`📦 Estoque REAL no servidor: ${available} unidades`);
+        }
       } catch (e) {
         console.error('❌ Erro ao processar resposta:', response.status, response.statusText);
+        errorMsg = `Erro ${response.status}: ${response.statusText}`;
       }
-      notify.error(errorMsg);
+      
+      // Mostrar aviso mais específico para erro de estoque
+      if (errorMsg.includes('insuficiente') || errorMsg.includes('Você solicitou')) {
+        notify.error(`⚠️ ${errorMsg}`);
+      } else {
+        notify.error(errorMsg);
+      }
       return;
     }
 
@@ -828,13 +857,8 @@ async function handleIncreaseQuantityInCart(itemId, newQuantity) {
   // Se já está no máximo, mostrar aviso
   if (cartItem.quantity >= product.stock) {
     console.log('⚠️ Limite de estoque atingido no carrinho!');
-    const msg = 'limite de estoque atingido, não é possivel adicionar mais unidades';
-    if (window.notify && typeof window.notify.warning === 'function') {
-      window.notify.warning(msg);
-    } else {
-      console.error('❌ notify não está disponível, usando alert');
-      alert(msg);
-    }
+    const msg = 'Limite de estoque atingido. Não é possível adicionar mais unidades.';
+    notify.warning(msg);
     return;
   }
 

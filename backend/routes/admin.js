@@ -54,10 +54,22 @@ module.exports = (pool) => {
   // Dashboard - resumo de vendas
   router.get('/dashboard', async (req, res) => {
     try {
+      // ✅ Total de pedidos (todos)
       const ordersResult = await pool.query('SELECT COUNT(*) as total_orders FROM orders');
-      const revenueResult = await pool.query('SELECT COALESCE(SUM(total), 0) as total_revenue FROM orders WHERE status != $1', ['cancelado']);
+      
+      // ✅ NOVO: Receita total apenas de pedidos APROVADOS (payment_status = 'aprovado')
+      const revenueResult = await pool.query(
+        'SELECT COALESCE(SUM(total), 0) as total_revenue FROM orders WHERE payment_status = $1',
+        ['aprovado']
+      );
+      
+      // Total de produtos
       const productsResult = await pool.query('SELECT COUNT(*) as total_products FROM products');
+      
+      // Produtos com estoque baixo
       const lowStockResult = await pool.query('SELECT id, name, stock FROM products WHERE stock < 10 ORDER BY stock');
+
+      console.log(`📊 Dashboard: ${ordersResult.rows[0].total_orders} pedidos, R$ ${parseFloat(revenueResult.rows[0].total_revenue).toFixed(2)} em receita aprovada`);
 
       res.json({
         totalOrders: ordersResult.rows[0].total_orders,
@@ -66,7 +78,7 @@ module.exports = (pool) => {
         lowStockProducts: lowStockResult.rows
       });
     } catch (error) {
-      console.error(error);
+      console.error('❌ Erro ao buscar dashboard:', error);
       res.status(500).json({ error: 'Erro ao buscar dashboard' });
     }
   });

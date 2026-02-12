@@ -621,15 +621,25 @@ module.exports = (pool) => {
     }
   });
 
-  // Obter receita total
+  // Obter receita total (de TODOS os pedidos aprovados, não apenas da tabela revenue)
   router.get('/admin/revenue/total', async (req, res) => {
     try {
-      const result = await pool.query(
-        'SELECT COALESCE(SUM(amount), 0) as total_revenue, COUNT(*) as transaction_count FROM revenue'
-      );
+      // ✅ NOVO: Calcular receita DIRETAMENTE dos pedidos aprovados
+      // Inclui todos os pedidos com payment_status = 'aprovado'
+      console.log('💰 Buscando receita total de pedidos aprovados...');
+      
+      const result = await pool.query(`
+        SELECT 
+          COALESCE(SUM(total), 0) as total_revenue,
+          COUNT(*) as transaction_count
+        FROM orders
+        WHERE payment_status = 'aprovado'
+      `);
       
       const totalRevenue = parseFloat(result.rows[0].total_revenue);
       const transactionCount = result.rows[0].transaction_count;
+
+      console.log(`✅ Receita total calculada: R$ ${totalRevenue.toFixed(2)} (${transactionCount} pedidos aprovados)`);
 
       res.json({
         total_revenue: totalRevenue,
@@ -637,17 +647,26 @@ module.exports = (pool) => {
         formatted: `R$ ${totalRevenue.toFixed(2)}`
       });
     } catch (error) {
-      console.error('Erro ao buscar receita total:', error);
+      console.error('❌ Erro ao buscar receita total:', error);
       res.status(500).json({ error: 'Erro ao buscar receita total' });
     }
   });
 
-  // Obter receita por período
+  // Obter receita por período (de pedidos aprovados)
   router.get('/admin/revenue/period', async (req, res) => {
     try {
       const { start_date, end_date } = req.query;
       
-      let query = 'SELECT COALESCE(SUM(amount), 0) as total_revenue, COUNT(*) as transaction_count FROM revenue WHERE 1=1';
+      console.log(`📊 Buscando receita por período: ${start_date} a ${end_date}`);
+      
+      // ✅ NOVO: Buscar diretamente da tabela orders com payment_status = 'aprovado'
+      let query = `
+        SELECT 
+          COALESCE(SUM(total), 0) as total_revenue,
+          COUNT(*) as transaction_count
+        FROM orders
+        WHERE payment_status = 'aprovado'
+      `;
       const params = [];
       let paramCount = 1;
 
@@ -668,6 +687,8 @@ module.exports = (pool) => {
       const totalRevenue = parseFloat(result.rows[0].total_revenue);
       const transactionCount = result.rows[0].transaction_count;
 
+      console.log(`✅ Receita período: R$ ${totalRevenue.toFixed(2)} (${transactionCount} pedidos)`);
+
       res.json({
         total_revenue: totalRevenue,
         transaction_count: transactionCount,
@@ -675,7 +696,7 @@ module.exports = (pool) => {
         period: { start_date, end_date }
       });
     } catch (error) {
-      console.error('Erro ao buscar receita por período:', error);
+      console.error('❌ Erro ao buscar receita por período:', error);
       res.status(500).json({ error: 'Erro ao buscar receita por período' });
     }
   });

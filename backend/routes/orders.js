@@ -29,13 +29,14 @@ module.exports = (pool) => {
       const createdAt = new Date().toISOString();
       
       // Definir status de pagamento conforme método
-      const paymentStatus = paymentMethod === 'pix' ? 'confirmado' : 'pendente';
+      // PIX: aprovado (já pago), Cartão: pendente (aguardando confirmação)
+      const paymentStatus = paymentMethod === 'pix' ? 'aprovado' : 'pendente';
       
       const orderResult = await pool.query(
         `INSERT INTO orders (id, user_id, customer_name, customer_phone, delivery_address, total, payment_method, status, payment_status, created_at)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
          RETURNING *`,
-        [orderId, userId, customerName, customerPhone, deliveryAddress, total, paymentMethod, 'preparando', paymentStatus, createdAt]
+        [orderId, userId, customerName, customerPhone, deliveryAddress, total, paymentMethod, 'em preparação', paymentStatus, createdAt]
       );
 
       // Adicionar itens do pedido (SEM decrementar estoque ainda)
@@ -86,12 +87,12 @@ module.exports = (pool) => {
           console.log(`📊 Status do Mercado Pago para ${order.payment_id}:`, pixResponse.data.status);
           
           // Se status mudou para approved, atualizar no banco
-          if (pixResponse.data.status === 'approved' && order.payment_status !== 'approved') {
+          if (pixResponse.data.status === 'approved' && order.payment_status !== 'aprovado') {
             console.log(`✅ Pagamento ${order.payment_id} confirmado! Atualizando BD...`);
             
             const updateResult = await pool.query(
-              'UPDATE orders SET payment_status = $1, status = $2 WHERE id = $3 RETURNING *',
-              ['approved', 'confirmed', orderId]
+              'UPDATE orders SET payment_status = $1 WHERE id = $2 RETURNING *',
+              ['aprovado', orderId]
             );
             
             order = updateResult.rows[0];
@@ -214,7 +215,7 @@ module.exports = (pool) => {
       // Mapear status do Mercado Pago para payment_status
       let paymentStatus = 'pendente';
       if (status === 'approved') {
-        paymentStatus = 'confirmado';
+        paymentStatus = 'aprovado';
       }
 
       // Atualizar apenas payment_status e payment_id (não alterar status do pedido)
@@ -330,8 +331,8 @@ module.exports = (pool) => {
     try {
       const { orderId } = req.params;
       const result = await pool.query(
-        'UPDATE orders SET status = $1 WHERE id = $2 RETURNING *',
-        ['confirmed', orderId]
+        'UPDATE orders SET payment_status = $1 WHERE id = $2 RETURNING *',
+        ['aprovado', orderId]
       );
 
       if (result.rows.length === 0) {
@@ -418,10 +419,10 @@ module.exports = (pool) => {
         }
       }
 
-      // Atualizar status do pedido para "cancelled"
+      // Atualizar status do pedido para "cancelado"
       const cancelResult = await pool.query(
         'UPDATE orders SET status = $1, payment_status = $2 WHERE id = $3 RETURNING *',
-        ['cancelled', 'cancelled', orderId]
+        ['cancelado', 'cancelado', orderId]
       );
 
       console.log(`✅ Pedido ${orderId} cancelado`);
@@ -558,13 +559,82 @@ module.exports = (pool) => {
     }
   });
 
+  // Atualizar ambos os status (pedido e pagamento) simultaneamente
+  router.patch('/:orderId', async (req, res) => {
+    try {
+      const { orderId } = req.params;
+      const { status, payment_status } = req.body;
+
+      // Valores aceitos em português
+      const statusValidos = ['em preparação', 'em rota de entrega', 'entregue', 'cancelado'];
+      const paymentStatusValidos = ['aprovado', 'pendente', 'cancelado'];
+
+      if (status && !statusValidos.includes(status)) {
+        return res.status(400).json({ 
+          error: 'Status de pedido inválido',
+          statusValidos
+        });
+      }
+
+      if (payment_status && !paymentStatusValidos.includes(payment_status)) {
+        return res.status(400).json({ 
+          error: 'Status de pagamento inválido',
+          statusValidos: paymentStatusValidos
+        });
+      }
+
+      // Buscar o pedido atual para verificação
+      const currentResult = await pool.query(
+        'SELECT * FROM orders WHERE id = $1',
+        [orderId]
+      );
+
+      if (currentResult.rows.length === 0) {
+        return res.status(404).json({ error: 'Pedido não encontrado' });
+      }
+
+      let updateQuery = 'UPDATE orders SET';
+      let params = [];
+      let paramCount = 1;
+
+      if (status) {
+        updateQuery += ` status = $${paramCount}`;
+        params.push(status);
+        paramCount++;
+      }
+
+      if (payment_status) {
+        if (status) {
+          updateQuery += ', ';
+        }
+        updateQuery += ` payment_status = $${paramCount}`;
+        params.push(payment_status);
+        paramCount++;
+      }
+
+      updateQuery += `, updated_at = CURRENT_TIMESTAMP WHERE id = $${paramCount} RETURNING *`;
+      params.push(orderId);
+
+      const result = await pool.query(updateQuery, params);
+
+      console.log(`✅ Pedido ${orderId} atualizado - Status: ${status || 'não alterado'}, Pagamento: ${payment_status || 'não alterado'}`);
+      res.json({
+        message: 'Status atualizado com sucesso',
+        order: result.rows[0]
+      });
+    } catch (error) {
+      console.error('Erro ao atualizar pedido:', error);
+      res.status(500).json({ error: 'Erro ao atualizar pedido' });
+    }
+  });
+
   // Atualizar status do pedido (admin)
   router.patch('/:orderId/status-pedido', async (req, res) => {
     try {
       const { orderId } = req.params;
       const { novoStatus } = req.body;
 
-      const statusValidos = ['preparando', 'em rota de entrega', 'entregue', 'pedido cancelado'];
+      const statusValidos = ['em preparação', 'em rota de entrega', 'entregue', 'cancelado'];
       if (!statusValidos.includes(novoStatus)) {
         return res.status(400).json({ 
           error: 'Status inválido',
@@ -598,7 +668,7 @@ module.exports = (pool) => {
       const { orderId } = req.params;
       const { novoStatus } = req.body;
 
-      const statusValidos = ['confirmado', 'pendente', 'pedido cancelado'];
+      const statusValidos = ['aprovado', 'pendente', 'cancelado'];
       if (!statusValidos.includes(novoStatus)) {
         return res.status(400).json({ 
           error: 'Status de pagamento inválido',

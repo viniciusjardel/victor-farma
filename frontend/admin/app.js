@@ -406,17 +406,17 @@ function displayOrders(orders) {
     
     // Cores para status do pedido
     const statusPedidoColors = {
-      'preparando': 'bg-purple-100 text-purple-800',
-      'em rota de entrega': 'bg-cyan-100 text-cyan-800',
+      'em preparação': 'bg-yellow-100 text-yellow-800',
+      'em rota de entrega': 'bg-blue-100 text-blue-800',
       'entregue': 'bg-green-100 text-green-800',
-      'pedido cancelado': 'bg-red-100 text-red-800'
+      'cancelado': 'bg-red-100 text-red-800'
     };
 
     // Cores para status de pagamento
     const statusPagamentoColors = {
-      'confirmado': 'bg-green-100 text-green-800',
+      'aprovado': 'bg-green-100 text-green-800',
       'pendente': 'bg-yellow-100 text-yellow-800',
-      'pedido cancelado': 'bg-red-100 text-red-800'
+      'cancelado': 'bg-red-100 text-red-800'
     };
 
     return `
@@ -430,7 +430,6 @@ function displayOrders(orders) {
         <td class="px-6 py-4 text-gray-700">${dateTime}</td>
         <td class="px-6 py-4 flex gap-2">
           <button class="px-3 py-1 bg-blue-500 hover:bg-blue-600 text-white text-xs rounded font-semibold transition-colors" onclick="openOrderModal('${order.id}')">Ver</button>
-          <button class="px-3 py-1 bg-green-600 hover:bg-green-700 text-white text-xs rounded font-semibold transition-colors" onclick="openStatusModal('${order.id}')">Alterar</button>
         </td>
       </tr>
     `;
@@ -445,11 +444,11 @@ function filterOrders() {
 
 function getStatusLabel(status) {
   const labels = {
-    'preparando': 'Preparando',
+    'em preparação': 'Em preparação',
     'em rota de entrega': 'Em rota de entrega',
     'entregue': 'Entregue',
-    'pedido cancelado': 'Pedido Cancelado',
-    'confirmado': 'Confirmado',
+    'cancelado': 'Cancelado',
+    'aprovado': 'Aprovado',
     'pendente': 'Pendente'
   };
   return labels[status] || status;
@@ -467,17 +466,17 @@ async function openOrderModal(orderId) {
     
     // Cores para status do pedido
     const statusPedidoColors = {
-      'preparando': 'bg-purple-100 text-purple-800',
+      'em preparação': 'bg-purple-100 text-purple-800',
       'em rota de entrega': 'bg-cyan-100 text-cyan-800',
       'entregue': 'bg-green-100 text-green-800',
-      'pedido cancelado': 'bg-red-100 text-red-800'
+      'cancelado': 'bg-red-100 text-red-800'
     };
 
     // Cores para status de pagamento
     const statusPagamentoColors = {
-      'confirmado': 'bg-green-100 text-green-800',
+      'aprovado': 'bg-green-100 text-green-800',
       'pendente': 'bg-yellow-100 text-yellow-800',
-      'pedido cancelado': 'bg-red-100 text-red-800'
+      'cancelado': 'bg-red-100 text-red-800'
     };
 
     content.innerHTML = `
@@ -541,9 +540,26 @@ async function openOrderModal(orderId) {
         <p class="text-gray-700">${order.delivery_address}</p>
       </div>
 
-      <button class="w-full px-6 py-3 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white rounded-lg font-bold transition-all" onclick="openStatusModal('${orderId}')">
-        ✏️ Alterar Status
-      </button>
+      <div class="grid grid-cols-2 gap-4 mb-4">
+        <div>
+          <label for="status-pedido-select-${orderId}" class="block text-sm font-bold text-gray-700 mb-2">📦 Status do Pedido</label>
+          <select id="status-pedido-select-${orderId}" class="w-full border border-gray-300 rounded-lg p-2 focus:outline-none focus:ring-2 focus:ring-green-500" onchange="saveOrderStatus('${orderId}', 'pedido')">
+            <option value="em preparação" ${order.status === 'em preparação' ? 'selected' : ''}>Em preparação</option>
+            <option value="em rota de entrega" ${order.status === 'em rota de entrega' ? 'selected' : ''}>Em rota de entrega</option>
+            <option value="entregue" ${order.status === 'entregue' ? 'selected' : ''}>Entregue</option>
+            <option value="cancelado" ${order.status === 'cancelado' ? 'selected' : ''}>Cancelado</option>
+          </select>
+        </div>
+
+        <div>
+          <label for="status-pagamento-select-${orderId}" class="block text-sm font-bold text-gray-700 mb-2">💳 Status de Pagamento</label>
+          <select id="status-pagamento-select-${orderId}" class="w-full border border-gray-300 rounded-lg p-2 focus:outline-none focus:ring-2 focus:ring-green-500" onchange="saveOrderStatus('${orderId}', 'pagamento')">
+            <option value="aprovado" ${order.payment_status === 'aprovado' ? 'selected' : ''}>Aprovado</option>
+            <option value="pendente" ${order.payment_status === 'pendente' ? 'selected' : ''}>Pendente</option>
+            <option value="cancelado" ${order.payment_status === 'cancelado' ? 'selected' : ''}>Cancelado</option>
+          </select>
+        </div>
+      </div>
     `;
 
     orderModal.classList.remove('hidden');
@@ -640,6 +656,58 @@ async function loadTotalRevenue() {
 
 // ==================== FUNÇÕES DE STATUS ====================
 
+// Salvar status quando o select é alterado
+async function saveOrderStatus(orderId, tipo) {
+  try {
+    const statusPedidoSelect = document.getElementById(`status-pedido-select-${orderId}`);
+    const statusPagamentoSelect = document.getElementById(`status-pagamento-select-${orderId}`);
+    
+    if (!statusPedidoSelect || !statusPagamentoSelect) return;
+
+    const statusPedido = statusPedidoSelect.value;
+    const statusPagamento = statusPagamentoSelect.value;
+
+    // Fazer request para atualizar (usar namespace admin onde o painel já opera)
+    const response = await fetch(`${API_URL}/admin/orders/${orderId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        status: statusPedido,
+        payment_status: statusPagamento
+      })
+    });
+
+    if (!response.ok) {
+      let errBody = null;
+      try { errBody = await response.json(); } catch (e) { /* ignore */ }
+      const msg = (errBody && (errBody.error || errBody.message)) || `HTTP ${response.status}`;
+      throw new Error(`Erro ao salvar: ${msg}`);
+    }
+
+    const data = await response.json();
+    
+    // Atualizar o array de pedidos localmente
+    const idx = allOrders.findIndex(o => o.id === orderId);
+    if (idx !== -1) {
+      allOrders[idx] = data.order || data;
+    }
+
+    showAdminToast('✅ Status atualizado com sucesso!', 'success');
+    
+    // Recarregar a lista de pedidos em background
+    await new Promise(resolve => setTimeout(resolve, 500));
+    filterOrders();
+  } catch (error) {
+    console.error('Erro ao salvar status:', error);
+    showAdminToast(`Erro: ${error.message}`, 'error');
+  }
+}
+
+function fecharStatusModal() {
+  const modal = document.getElementById('status-modal');
+  if (modal) modal.remove();
+}
+
 function openStatusModal(orderId) {
   const order = allOrders.find(o => o.id === orderId);
   if (!order) {
@@ -647,99 +715,87 @@ function openStatusModal(orderId) {
     return;
   }
 
-  // Criar modal de status
+  fecharStatusModal();
+
   const modal = document.createElement('div');
-  modal.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50';
+  modal.id = 'status-modal';
+  modal.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4';
   modal.innerHTML = `
-    <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-md max-h-96 overflow-y-auto">
-      <h2 class="text-xl font-bold text-gray-900 mb-2">Alterar Status do Pedido</h2>
+    <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-md overflow-y-auto">
+      <h2 class="text-xl font-bold text-gray-900 mb-2">🔄 Alterar Status</h2>
       <p class="text-sm text-gray-600 mb-6">Pedido #${order.id.substring(0, 12)}...</p>
       
-      <!-- Status do Pedido -->
-      <div class="mb-6">
-        <label class="block text-sm font-bold text-gray-700 mb-2">📦 Status do Pedido</label>
-        <select id="status-pedido-select" class="w-full border border-gray-300 rounded-lg p-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
-          <option value="preparando" ${order.status === 'preparando' ? 'selected' : ''}>Preparando</option>
-          <option value="em rota de entrega" ${order.status === 'em rota de entrega' ? 'selected' : ''}>Em rota de entrega</option>
-          <option value="entregue" ${order.status === 'entregue' ? 'selected' : ''}>Entregue</option>
-          <option value="pedido cancelado" ${order.status === 'pedido cancelado' ? 'selected' : ''}>Pedido cancelado</option>
-        </select>
-      </div>
+      <form id="status-form">
+        <div class="mb-6">
+          <label for="status-pedido-select" class="block text-sm font-bold text-gray-700 mb-2">📦 Status do Pedido</label>
+            <select id="status-pedido-select" class="w-full border border-gray-300 rounded-lg p-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
+              <option value="em preparação" ${order.status === 'em preparação' ? 'selected' : ''}>Em preparação</option>
+              <option value="em rota de entrega" ${order.status === 'em rota de entrega' ? 'selected' : ''}>Em rota de entrega</option>
+              <option value="entregue" ${order.status === 'entregue' ? 'selected' : ''}>Entregue</option>
+              <option value="cancelado" ${order.status === 'cancelado' ? 'selected' : ''}>Cancelado</option>
+            </select>
+        </div>
 
-      <!-- Status de Pagamento -->
-      <div class="mb-6">
-        <label class="block text-sm font-bold text-gray-700 mb-2">💳 Status de Pagamento</label>
-        <select id="status-pagamento-select" class="w-full border border-gray-300 rounded-lg p-2 focus:outline-none focus:ring-2 focus:ring-green-500">
-          <option value="confirmado" ${order.payment_status === 'confirmado' ? 'selected' : ''}>Confirmado</option>
-          <option value="pendente" ${order.payment_status === 'pendente' ? 'selected' : ''}>Pendente</option>
-          <option value="pedido cancelado" ${order.payment_status === 'pedido cancelado' ? 'selected' : ''}>Pedido cancelado</option>
-        </select>
-      </div>
+        <div class="mb-6">
+          <label for="status-pagamento-select" class="block text-sm font-bold text-gray-700 mb-2">💳 Status de Pagamento</label>
+          <select id="status-pagamento-select" class="w-full border border-gray-300 rounded-lg p-2 focus:outline-none focus:ring-2 focus:ring-green-500">
+            <option value="aprovado" ${order.payment_status === 'aprovado' ? 'selected' : ''}>Aprovado</option>
+            <option value="pendente" ${order.payment_status === 'pendente' ? 'selected' : ''}>Pendente</option>
+            <option value="cancelado" ${order.payment_status === 'cancelado' ? 'selected' : ''}>Cancelado</option>
+          </select>
+        </div>
 
-      <div class="flex gap-2">
-        <button onclick="this.closest('.fixed').remove()" class="flex-1 bg-gray-400 hover:bg-gray-500 text-white font-bold py-2 rounded-lg transition-colors">
-          Cancelar
-        </button>
-        <button onclick="updateOrderStatus('${orderId}')" class="flex-1 bg-green-600 hover:bg-green-700 text-white font-bold py-2 rounded-lg transition-colors">
-          Salvar
-        </button>
-      </div>
+        <div class="flex gap-2">
+          <button type="button" class="flex-1 bg-gray-400 hover:bg-gray-500 text-white font-bold py-2 rounded-lg" id="btn-cancel">Cancelar</button>
+          <button type="button" class="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 rounded-lg" id="btn-save">💾 Salvar</button>
+        </div>
+      </form>
     </div>
   `;
+  
   document.body.appendChild(modal);
+  
+  // LISTENERS APÓS INSERIR NO DOM
+  document.getElementById('btn-cancel').addEventListener('click', fecharStatusModal);
+  document.getElementById('btn-save').addEventListener('click', async (e) => {
+    e.preventDefault();
+    const statusPedido = document.getElementById('status-pedido-select').value;
+    const statusPagamento = document.getElementById('status-pagamento-select').value;
+    await atualizar_Status(orderId, statusPedido, statusPagamento);
+  });
+  
+  modal.addEventListener('click', (e) => {
+    if (e.target === modal) fecharStatusModal();
+  });
+  
   document.getElementById('status-pedido-select').focus();
 }
 
-async function updateOrderStatus(orderId) {
-  const statusPedido = document.getElementById('status-pedido-select').value;
-  const statusPagamento = document.getElementById('status-pagamento-select').value;
-
+async function atualizar_Status(orderId, statusPedido, statusPagamento) {
   try {
-    // Atualizar status do pedido
-    const responsePedido = await fetch(`${API_URL}/orders/${orderId}/status-pedido`, {
+    const res1 = await fetch(`${API_URL}/orders/${orderId}/status-pedido`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ novoStatus: statusPedido })
     });
+    if (!res1.ok) throw new Error(`Status: ${res1.status}`);
 
-    if (!responsePedido.ok) {
-      const error = await responsePedido.json();
-      showAdminToast(`Erro ao atualizar status do pedido: ${error.error}`, 'error');
-      return;
-    }
-
-    // Atualizar status de pagamento
-    const responsePagamento = await fetch(`${API_URL}/orders/${orderId}/payment-status`, {
+    const res2 = await fetch(`${API_URL}/orders/${orderId}/payment-status`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ novoStatus: statusPagamento })
     });
+    if (!res2.ok) throw new Error(`Pagamento: ${res2.status}`);
 
-    if (!responsePagamento.ok) {
-      const error = await responsePagamento.json();
-      showAdminToast(`Erro ao atualizar status de pagamento: ${error.error}`, 'error');
-      return;
-    }
+    const data = await res2.json();
+    const idx = allOrders.findIndex(o => o.id === orderId);
+    if (idx !== -1) allOrders[idx] = data.pedido;
 
-    const updatedOrder = await responsePagamento.json();
-    
-    // Atualizar no array de pedidos
-    const index = allOrders.findIndex(o => o.id === orderId);
-    if (index !== -1) {
-      allOrders[index] = updatedOrder.pedido;
-    }
-
-    showAdminToast(`✅ Pedido atualizado com sucesso`);
-    
-    // Fechar modal
-    const modal = document.querySelector('.fixed.inset-0.bg-black');
-    if (modal) modal.remove();
-    
-    // Recarregar pedidos
+    showAdminToast('✅ Sucesso!');
+    fecharStatusModal();
     filterOrders();
-  } catch (error) {
-    console.error('Erro ao atualizar status:', error);
-    showAdminToast('Erro ao atualizar status', 'error');
+  } catch (e) {
+    showAdminToast(`Erro: ${e.message}`, 'error');
   }
 }
 

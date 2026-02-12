@@ -135,9 +135,9 @@ module.exports = (pool) => {
           
           console.log(`📊 Status do Mercado Pago para ${order.payment_id}:`, pixResponse.data.status);
           
-          // Se status mudou para approved, atualizar no banco
+          // Se status mudou para approved, atualizar no banco E DECREMENTAR ESTOQUE
           if (pixResponse.data.status === 'approved' && order.payment_status !== 'aprovado') {
-            console.log(`✅ Pagamento ${order.payment_id} confirmado! Atualizando BD...`);
+            console.log(`✅ Pagamento ${order.payment_id} confirmado! Atualizando BD e decrementando estoque...`);
             
             const updateResult = await pool.query(
               'UPDATE orders SET payment_status = $1 WHERE id = $2 RETURNING *',
@@ -145,11 +145,21 @@ module.exports = (pool) => {
             );
             
             order = updateResult.rows[0];
-            console.log(`✅ Pedido ${orderId} atualizado para CONFIRMED`);
+            console.log(`✅ Pedido ${orderId} atualizado para aprovado`);
+            
+            // 📦 Também decrementar estoque AQUI como fallback (evita webhook demorada)
+            try {
+              console.log(`📦 Decrementando estoque do pedido via GET endpoint...`);
+              await decrementarEstoqueDosPedido(orderId);
+              console.log(`✅ Estoque decrementado com sucesso!`);
+            } catch (stockError) {
+              console.error(`⚠️ Erro ao decrementar estoque no GET:`, stockError.message);
+              // Não bloqueia a resposta se falhar
+            }
           }
         } catch (error) {
           console.warn(`⚠️ Erro ao consultar API PIX para ${order.payment_id}:`, error.message);
-          // Continua com o status do banco local se a API falhar — NAÃ bloqueia
+          // Continua com o status do banco local se a API falhar — NÃO bloqueia
         }
       }
 

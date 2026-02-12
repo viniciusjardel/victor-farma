@@ -4,25 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Victor Farma - Delivery de Farmácia</title>
-  <script>
-    // Load Tailwind from CDN only in development (localhost).
-    // In production you should compile Tailwind into a static CSS file instead.
-    (function(){
-      try {
-        if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
-          var s = document.createElement('script');
-          s.src = 'https://cdn.tailwindcss.com';
-          s.async = true;
-          document.head.appendChild(s);
-          console.info('Tailwind CDN loaded (development).');
-        } else {
-          console.info('Tailwind CDN skipped in production. Build Tailwind with PostCSS or Tailwind CLI for production.');
-        }
-      } catch (e) {
-        console.warn('Erro ao decidir carregar Tailwind CDN:', e);
-      }
-    })();
-  </script>
+  <script src="https://cdn.tailwindcss.com"></script>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap');
     body { font-family: 'Poppins', sans-serif; }

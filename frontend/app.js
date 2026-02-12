@@ -1595,11 +1595,24 @@ function completePixPayment(order) {
         const cliente = order.customer_name || order.name || order.client_name || '-';
         const telefone = order.customer_phone || order.phone || order.mobile || '-';
         const endereco = order.delivery_address || order.address || '-';
-        const itensList = (order.items || []).map(it => `- ${it.quantity}x ${it.name || it.product_name || ''}`).join('\n') || '-';
 
-        const texto = `✅ Pagamento Confirmado!\n\nPedido: ${order.id}\nTotal: R$ ${parseFloat(order.total).toFixed(2)}${dateTimeStr}\n\nChave PIX: ${brcode}\n\nCliente: ${cliente}\nTelefone: ${telefone}\nEndereço: ${endereco}\n\nItens:\n${itensList}\n\nObservações: ${order.notes || order.observations || '-'}\n\nObrigado!`;
-        const url = `https://wa.me/5581987508211?text=${encodeURIComponent(texto)}`;
-        window.open(url, '_blank');
+        // Buscar itens do pedido via API para garantir que apareçam na mensagem WhatsApp
+        fetch(`${API_URL}/orders/${order.id}`)
+          .then(res => res.json())
+          .then(data => {
+            const items = (data.items || []).map(it => `- ${it.quantity}x ${it.name || it.product_name || 'Produto'} (R$ ${parseFloat(it.price).toFixed(2)})`).join('\n') || 'Nenhum item';
+            const texto = `✅ Pedido Realizado!\n\nPedido: ${order.id}\nTotal: R$ ${parseFloat(order.total).toFixed(2)}${dateTimeStr}\n\nCliente: ${cliente}\nTelefone: ${telefone}\nEndereço: ${endereco}\n\nItens:\n${items}\n\nObservações: ${order.notes || order.observations || '-'}\n\nObrigado!`;
+            const url = `https://wa.me/5581987508211?text=${encodeURIComponent(texto)}`;
+            window.open(url, '_blank');
+          })
+          .catch(err => {
+            console.error('Erro ao buscar itens do pedido:', err);
+            // Fallback: enviar sem itens
+            const itensList = '-';
+            const texto = `✅ Pedido Realizado!\n\nPedido: ${order.id}\nTotal: R$ ${parseFloat(order.total).toFixed(2)}${dateTimeStr}\n\nCliente: ${cliente}\nTelefone: ${telefone}\nEndereço: ${endereco}\n\nItens:\n${itensList}\n\nObservações: ${order.notes || order.observations || '-'}\n\nObrigado!`;
+            const url = `https://wa.me/5581987508211?text=${encodeURIComponent(texto)}`;
+            window.open(url, '_blank');
+          });
       });
       whatsappBtn.addEventListener('mouseenter', () => {
         whatsappBtn.style.backgroundColor = '#059669';
@@ -1724,20 +1737,40 @@ function showConfirmation(order) {
       const cliente = order.customer_name || order.name || order.client_name || '-';
       const telefone = order.customer_phone || order.phone || order.mobile || '-';
       const endereco = order.delivery_address || order.address || '-';
-      const itensList = (order.items || []).map(it => `- ${it.quantity}x ${it.name || it.product_name || ''}`).join('\n') || '-';
 
-      // Adaptar mensagem conforme forma de pagamento
-      let texto;
-      if (order.payment_method === 'credit_card') {
-        texto = `✅ Pedido Realizado!\n\nPedido: ${order.id}\nTotal: R$ ${parseFloat(order.total).toFixed(2)}${dateTimeStr}\n\nAtenção: Pagamento com cartão será coletado na entrega.\n\nCliente: ${cliente}\nTelefone: ${telefone}\nEndereço: ${endereco}\n\nItens:\n${itensList}\n\nObservações: ${order.notes || order.observations || '-'}\n\nObrigado!`;
-      } else if (order.payment_method === 'pix') {
-        texto = `✅ Pagamento Confirmado!\n\nPedido: ${order.id}\nTotal: R$ ${parseFloat(order.total).toFixed(2)}${dateTimeStr}\n\nCliente: ${cliente}\nTelefone: ${telefone}\nEndereço: ${endereco}\n\nItens:\n${itensList}\n\nObservações: ${order.notes || order.observations || '-'}\n\nChave PIX: ${order.payment?.qr_code || order.payment?.qrCode || ''}\n\nObrigado!`;
-      } else {
-        texto = `✅ Pedido Realizado!\n\nPedido: ${order.id}\nTotal: R$ ${parseFloat(order.total).toFixed(2)}${dateTimeStr}\n\nCliente: ${cliente}\nTelefone: ${telefone}\nEndereço: ${endereco}\n\nItens:\n${itensList}\n\nObservações: ${order.notes || order.observations || '-'}\n\nObrigado!`;
-      }
+      // Buscar itens do pedido via API para garantir que apareçam na mensagem WhatsApp
+      fetch(`${API_URL}/orders/${order.id}`)
+        .then(res => res.json())
+        .then(data => {
+          const itensList = (data.items || []).map(it => `- ${it.quantity}x ${it.name || it.product_name || 'Produto'} (R$ ${parseFloat(it.price).toFixed(2)})`).join('\n') || 'Nenhum item';
 
-      const url = `https://wa.me/5581987508211?text=${encodeURIComponent(texto)}`;
-      window.open(url, '_blank');
+          // Adaptar mensagem conforme forma de pagamento
+          let texto;
+          if (order.payment_method === 'credit_card') {
+            texto = `✅ Pedido Realizado!\n\nPedido: ${order.id}\nTotal: R$ ${parseFloat(order.total).toFixed(2)}${dateTimeStr}\n\nAtenção: Pagamento com cartão será coletado na entrega.\n\nCliente: ${cliente}\nTelefone: ${telefone}\nEndereço: ${endereco}\n\nItens:\n${itensList}\n\nObservações: ${order.notes || order.observations || '-'}\n\nObrigado!`;
+          } else if (order.payment_method === 'pix') {
+            texto = `✅ Pagamento Confirmado!\n\nPedido: ${order.id}\nTotal: R$ ${parseFloat(order.total).toFixed(2)}${dateTimeStr}\n\nCliente: ${cliente}\nTelefone: ${telefone}\nEndereço: ${endereco}\n\nItens:\n${itensList}\n\nObservações: ${order.notes || order.observations || '-'}\n\nChave PIX: ${order.payment?.qr_code || order.payment?.qrCode || ''}\n\nObrigado!`;
+          } else {
+            texto = `✅ Pedido Realizado!\n\nPedido: ${order.id}\nTotal: R$ ${parseFloat(order.total).toFixed(2)}${dateTimeStr}\n\nCliente: ${cliente}\nTelefone: ${telefone}\nEndereço: ${endereco}\n\nItens:\n${itensList}\n\nObservações: ${order.notes || order.observations || '-'}\n\nObrigado!`;
+          }
+
+          const url = `https://wa.me/5581987508211?text=${encodeURIComponent(texto)}`;
+          window.open(url, '_blank');
+        })
+        .catch(err => {
+          console.error('Erro ao buscar itens do pedido:', err);
+          // Fallback: enviar sem itens detalhados
+          let texto;
+          if (order.payment_method === 'credit_card') {
+            texto = `✅ Pedido Realizado!\n\nPedido: ${order.id}\nTotal: R$ ${parseFloat(order.total).toFixed(2)}${dateTimeStr}\n\nAtenção: Pagamento com cartão será coletado na entrega.\n\nCliente: ${cliente}\nTelefone: ${telefone}\nEndereço: ${endereco}\n\nItens:\n-\n\nObservações: ${order.notes || order.observations || '-'}\n\nObrigado!`;
+          } else if (order.payment_method === 'pix') {
+            texto = `✅ Pagamento Confirmado!\n\nPedido: ${order.id}\nTotal: R$ ${parseFloat(order.total).toFixed(2)}${dateTimeStr}\n\nCliente: ${cliente}\nTelefone: ${telefone}\nEndereço: ${endereco}\n\nItens:\n-\n\nObservações: ${order.notes || order.observations || '-'}\n\nChave PIX: ${order.payment?.qr_code || order.payment?.qrCode || ''}\n\nObrigado!`;
+          } else {
+            texto = `✅ Pedido Realizado!\n\nPedido: ${order.id}\nTotal: R$ ${parseFloat(order.total).toFixed(2)}${dateTimeStr}\n\nCliente: ${cliente}\nTelefone: ${telefone}\nEndereço: ${endereco}\n\nItens:\n-\n\nObservações: ${order.notes || order.observations || '-'}\n\nObrigado!`;
+          }
+          const url = `https://wa.me/5581987508211?text=${encodeURIComponent(texto)}`;
+          window.open(url, '_blank');
+        });
     }, { once: true }); // Executar apenas uma vez
   }
 }

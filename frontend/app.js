@@ -1789,4 +1789,5 @@ function showConfirmation(order) {
           window.open(url, '_blank');
         });
     });
+  }
 }

@@ -131,6 +131,127 @@ if (closeProductImageModalBtn) {
   });
 }
 
+// ====== FUNÇÃO AUXILIAR PARA OBTER O PEDIDO ======
+function getOrderData() {
+  // Tentar várias fontes na seguinte ordem:
+  if (window.lastOrder) {
+    console.log('📦 Pedido obtido de window.lastOrder');
+    return window.lastOrder;
+  }
+  
+  if (currentOrder) {
+    console.log('📦 Pedido obtido de currentOrder');
+    return currentOrder;
+  }
+  
+  // Se nenhum estiver disponível, tentar obter do DOM (ID do pedido)
+  const orderIdEl = document.getElementById('order-id-display');
+  if (orderIdEl && orderIdEl.textContent) {
+    const orderId = orderIdEl.textContent.replace('#', '').trim();
+    if (orderId) {
+      console.log('📦 Obtendo dados do pedido do ID no DOM:', orderId);
+      return {
+        id: orderId,
+        total: 0,
+        customer_name: '-',
+        customer_phone: '-',
+        delivery_address: '-'
+      };
+    }
+  }
+  
+  console.warn('⚠️ Nenhuma fonte de dados de pedido disponível');
+  return null;
+}
+
+// ====== LISTENER GLOBAL DO BOTÃO WHATSAPP ======
+document.addEventListener('click', async (e) => {
+  if (e.target.id === 'confirmation-whatsapp-btn' || e.target.closest('#confirmation-whatsapp-btn')) {
+    e.preventDefault();
+    e.stopPropagation();
+    console.log('✅ BOTÃO WHATSAPP CLICADO!');
+    
+    const order = getOrderData();
+    if (!order) {
+      console.error('❌ Nenhum pedido encontrado!');
+      notify.error('Nenhum pedido encontrado. Tente fazer um novo pedido.');
+      return;
+    }
+    
+    console.log('📋 Tipos do pedido obtido:', {
+      id: order.id,
+      total: order.total,
+      customer_name: order.customer_name,
+      payment_method: order.payment_method
+    });
+
+    try {
+      // Buscar dados completos e itens do pedido diretamente da API
+      const res = await fetch(`${API_URL}/orders/${order.id}`);
+      if (!res.ok) {
+        throw new Error(`Erro ao buscar pedido: ${res.status}`);
+      }
+      
+      const data = await res.json();
+      const orderCompleto = data.order;
+      const items = data.items || [];
+
+      console.log('📦 Dados completos do pedido:', {
+        id: orderCompleto.id,
+        customer_name: orderCompleto.customer_name,
+        customer_phone: orderCompleto.customer_phone,
+        delivery_address: orderCompleto.delivery_address,
+        total: orderCompleto.total,
+        items_count: items.length
+      });
+
+      // Formatar data/hora
+      const created = orderCompleto.created_at;
+      let dateTimeStr = '';
+      if (created) {
+        const d = new Date(created);
+        const dd = String(d.getDate()).padStart(2, '0');
+        const MM = String(d.getMonth() + 1).padStart(2, '0');
+        const yyyy = d.getFullYear();
+        const hh = String(d.getHours()).padStart(2, '0');
+        const min = String(d.getMinutes()).padStart(2, '0');
+        const ss = String(d.getSeconds()).padStart(2, '0');
+        dateTimeStr = `\nData/Hora: ${dd}/${MM}/${yyyy} - ${hh}:${min}:${ss}`;
+      }
+
+      // Extrair dados com validação
+      const cliente = (orderCompleto.customer_name || '').trim() || '-';
+      const telefone = (orderCompleto.customer_phone || '').trim() || '-';
+      const endereco = (orderCompleto.delivery_address || '').trim() || '-';
+      const total = parseFloat(orderCompleto.total || 0).toFixed(2);
+
+      // Formatar lista de itens
+      const itensList = items && items.length > 0 
+        ? items.map(it => `- ${it.quantity}x ${(it.name || it.product_name || 'Produto').trim()} (R$ ${parseFloat(it.price || 0).toFixed(2)})`).join('\n')
+        : 'Nenhum item';
+
+      // Construir mensagem conforme método de pagamento
+      let texto;
+      if (orderCompleto.payment_method === 'credit_card') {
+        texto = `✅ *Pedido Realizado!*\n\n📋 *Pedido:* ${orderCompleto.id}\n💰 *Total:* R$ ${total}${dateTimeStr}\n\n⚠️ *Atenção:* Pagamento com cartão será coletado na entrega.\n\n👤 *Cliente:* ${cliente}\n📱 *Telefone:* ${telefone}\n📍 *Endereço:* ${endereco}\n\n📦 *Itens:*\n${itensList}\n\n✨ Obrigado por escolher a Victor Farma!`;
+      } else if (orderCompleto.payment_method === 'pix') {
+        texto = `✅ *Pagamento Confirmado!*\n\n📋 *Pedido:* ${orderCompleto.id}\n💰 *Total:* R$ ${total}${dateTimeStr}\n\n👤 *Cliente:* ${cliente}\n📱 *Telefone:* ${telefone}\n📍 *Endereço:* ${endereco}\n\n📦 *Itens:*\n${itensList}\n\n✨ Obrigado por escolher a Victor Farma!`;
+      } else {
+        texto = `✅ *Pedido Realizado!*\n\n📋 *Pedido:* ${orderCompleto.id}\n💰 *Total:* R$ ${total}${dateTimeStr}\n\n👤 *Cliente:* ${cliente}\n📱 *Telefone:* ${telefone}\n📍 *Endereço:* ${endereco}\n\n📦 *Itens:*\n${itensList}\n\n✨ Obrigado por escolher a Victor Farma!`;
+      }
+
+      const url = `https://wa.me/5581987508211?text=${encodeURIComponent(texto)}`;
+      console.log('📱 Abrindo WhatsApp com dados completos...');
+      window.open(url, '_blank');
+      notify.success('Abrindo WhatsApp...');
+    } catch (err) {
+      console.error('❌ Erro ao compartilhar:', err);
+      notify.error('Erro ao buscar dados do pedido. Verifique a conexão.');
+    }
+  }
+});
+// ====== FIM LISTENER WHATSAPP ======
+
 // Fechar modal de imagem ao clicar fora
 if (productImageModal) {
   productImageModal.addEventListener('click', (e) => {
@@ -982,9 +1103,42 @@ async function removeFromCart(itemId) {
 async function handleCheckoutFormSubmit(e) {
   e.preventDefault();
 
-  const customerName = document.getElementById('customer-name').value;
-  const customerPhone = document.getElementById('customer-phone').value;
-  const deliveryAddress = document.getElementById('delivery-address').value;
+  const customerName = (document.getElementById('customer-name').value || '').trim();
+  const customerPhone = (document.getElementById('customer-phone').value || '').trim();
+  const deliveryAddress = (document.getElementById('delivery-address').value || '').trim();
+
+  // ✅ VALIDAR DADOS ANTES DE PROSSEGUIR
+  console.log('🔍 Validando dados do checkout:', {
+    customerName: `"${customerName}" (${customerName.length} chars)`,
+    customerPhone: `"${customerPhone}" (${customerPhone.length} chars)`,
+    deliveryAddress: `"${deliveryAddress}" (${deliveryAddress.length} chars)`,
+    cartItems: cart.length
+  });
+
+  // Validação de campos vazios
+  if (!customerName) {
+    notify.error('Por favor, preencha o nome do cliente');
+    console.error('❌ Nome vazio');
+    return;
+  }
+
+  if (!customerPhone) {
+    notify.error('Por favor, preencha o telefone para contato');
+    console.error('❌ Telefone vazio');
+    return;
+  }
+
+  if (!deliveryAddress) {
+    notify.error('Por favor, preencha o endereço de entrega');
+    console.error('❌ Endereço vazio');
+    return;
+  }
+
+  if (cart.length === 0) {
+    notify.error('Seu carrinho está vazio');
+    console.error('❌ Carrinho vazio');
+    return;
+  }
 
   const items = cart.map(item => ({
     productId: item.product_id,
@@ -998,6 +1152,8 @@ async function handleCheckoutFormSubmit(e) {
     deliveryAddress,
     items
   };
+
+  console.log('✅ Dados do checkout validados e armazenados');
 
   // Mostrar modal de escolha de pagamento
   checkoutModal.classList.add('hidden');
@@ -1078,6 +1234,7 @@ async function processCardPayment() {
 
     const data = await response.json();
     currentOrder = data.order;
+    window.lastOrder = data.order; // Armazenar para o botão WhatsApp
 
     console.log('✅ Pedido criado com sucesso:', currentOrder);
     notify.success('Pedido criado com sucesso!');
@@ -1127,6 +1284,7 @@ async function processPixPayment() {
 
     const data = await response.json();
     currentOrder = data.order;
+    window.lastOrder = data.order; // Armazenar para o botão WhatsApp
     loadingDiv.remove();
 
     console.log('✅ Pedido PIX criado:', currentOrder);
@@ -1508,33 +1666,22 @@ document.addEventListener('visibilitychange', () => {
     if (modal && modal.parentElement) {
       const oid = modal.getAttribute('data-order-id');
       
-      // Se o pagamento foi confirmado, fechar o modal após 2 segundos
+      // Se o pagamento foi confirmado, NÃO FECHAR o modal automaticamente
+      // O usuário pode fechar manualmente quando quiser
       if (modal._paymentConfirmed) {
-        console.log('🔔 Cliente retornou ao site. Fechando modal em 2 segundos...');
-        setTimeout(() => {
-          if (modal._pixObserver) {
-            modal._pixObserver.disconnect();
-          }
-          try {
-            if (modal.parentElement) {
-              document.body.removeChild(modal);
-            }
-          } catch (e) { /* already removed */ }
-          document.body.style.overflow = 'auto';
-          currentPixOverlay = null;
-          
-          // Buscar dados da order para mostrar confirmação
-          fetch(`${API_URL}/orders/${oid}`)
-            .then(res => res.json())
-            .then(data => {
-              const order = data.order;
-              showConfirmation(order);
-            })
-            .catch(err => {
-              console.error('Erro ao buscar dados do pedido:', err);
-              showConfirmation({ id: oid, total: 0 });
-            });
-        }, 2000);
+        console.log('✅ Pagamento confirmado! Modal pode ser fechado manualmente pelo usuário.');
+        
+        // Buscar dados da order para mostrar confirmação (mas SEM fechar o modal)
+        fetch(`${API_URL}/orders/${oid}`)
+          .then(res => res.json())
+          .then(data => {
+            const order = data.order;
+            console.log('📋 Dados do pedido carregados:', order);
+            // Apenas log, não fecha o modal
+          })
+          .catch(err => {
+            console.error('Erro ao buscar dados do pedido:', err);
+          });
       } else if (oid) {
         // Se pagamento ainda não confirmado, apenas verificar status
         checkOrderStatus(oid);
@@ -1546,6 +1693,16 @@ document.addEventListener('visibilitychange', () => {
 // PIX confirmado com sucesso
 function completePixPayment(order) {
   console.log('✅ Completando pagamento PIX:', order.id);
+  console.log('   Armazenando pedido em window.lastOrder e currentOrder');
+  
+  // 🔥 CRUCIAL: Armazenar o pedido para o botão WhatsApp do modal de confirmação
+  window.lastOrder = order;
+  currentOrder = order;
+  
+  console.log('✅ Pedido armazenado com sucesso:');
+  console.log('   window.lastOrder.id:', window.lastOrder?.id);
+  console.log('   currentOrder.id:', currentOrder?.id);
+  
   notify.success('Pagamento PIX confirmado!', 3000);
   
   // ✅ Usar referência global
@@ -1707,6 +1864,7 @@ function pixPaymentTimeout(orderId) {
 
 // Mostrar confirmação
 function showConfirmation(order) {
+  console.log('🔍 showConfirmation chamado com order:', order);
   document.getElementById('order-id-display').textContent = order.id;
   // Exibir data e hora do pedido (se disponível) no formato DD/MM/YYYY - HH:MM
   try {
@@ -1730,64 +1888,11 @@ function showConfirmation(order) {
   confirmationModal.classList.remove('hidden');
   notify.success(`Pedido #${order.id} confirmado! Aguarde atualizações por WhatsApp.`, 4000);
 
-  // Ligar botão WhatsApp no modal de confirmação (adaptar mensagem conforme forma de pagamento)
-  const whatsappConfirmBtn = document.getElementById('confirmation-whatsapp-btn');
-  if (whatsappConfirmBtn) {
-    // Remover listeners antigos para evitar duplicação
-    whatsappConfirmBtn.replaceWith(whatsappConfirmBtn.cloneNode(true));
-    const newBtn = document.getElementById('confirmation-whatsapp-btn');
-    
-    newBtn.addEventListener('click', () => {
-      const created = order.created_at || order.createdAt || order.created;
-      let dateTimeStr = '';
-      if (created) {
-        const d = new Date(created);
-        const dd = String(d.getDate()).padStart(2, '0');
-        const MM = String(d.getMonth() + 1).padStart(2, '0');
-        const yyyy = d.getFullYear();
-        const hh = String(d.getHours()).padStart(2, '0');
-        const min = String(d.getMinutes()).padStart(2, '0');
-        const ss = String(d.getSeconds()).padStart(2, '0');
-        dateTimeStr = `\nData/Hora: ${dd}/${MM}/${yyyy} - ${hh}:${min}:${ss}`;
-      }
-
-      const cliente = order.customer_name || order.name || order.client_name || '-';
-      const telefone = order.customer_phone || order.phone || order.mobile || '-';
-      const endereco = order.delivery_address || order.address || '-';
-
-      // Buscar itens do pedido via API para garantir que apareçam na mensagem WhatsApp
-      fetch(`${API_URL}/orders/${order.id}`)
-        .then(res => res.json())
-        .then(data => {
-          const itensList = (data.items || []).map(it => `- ${it.quantity}x ${it.name || it.product_name || 'Produto'} (R$ ${parseFloat(it.price).toFixed(2)})`).join('\n') || 'Nenhum item';
-
-          // Adaptar mensagem conforme forma de pagamento
-          let texto;
-          if (order.payment_method === 'credit_card') {
-            texto = `✅ Pedido Realizado!\n\nPedido: ${order.id}\nTotal: R$ ${parseFloat(order.total).toFixed(2)}${dateTimeStr}\n\nAtenção: Pagamento com cartão será coletado na entrega.\n\nCliente: ${cliente}\nTelefone: ${telefone}\nEndereço: ${endereco}\n\nItens:\n${itensList}\n\nObservações: ${order.notes || order.observations || '-'}\n\nObrigado!`;
-          } else if (order.payment_method === 'pix') {
-            texto = `✅ Pagamento Confirmado!\n\nPedido: ${order.id}\nTotal: R$ ${parseFloat(order.total).toFixed(2)}${dateTimeStr}\n\nCliente: ${cliente}\nTelefone: ${telefone}\nEndereço: ${endereco}\n\nItens:\n${itensList}\n\nObservações: ${order.notes || order.observations || '-'}\n\nChave PIX: ${order.payment?.qr_code || order.payment?.qrCode || ''}\n\nObrigado!`;
-          } else {
-            texto = `✅ Pedido Realizado!\n\nPedido: ${order.id}\nTotal: R$ ${parseFloat(order.total).toFixed(2)}${dateTimeStr}\n\nCliente: ${cliente}\nTelefone: ${telefone}\nEndereço: ${endereco}\n\nItens:\n${itensList}\n\nObservações: ${order.notes || order.observations || '-'}\n\nObrigado!`;
-          }
-
-          const url = `https://wa.me/5581987508211?text=${encodeURIComponent(texto)}`;
-          window.open(url, '_blank');
-        })
-        .catch(err => {
-          console.error('Erro ao buscar itens do pedido:', err);
-          // Fallback: enviar sem itens detalhados
-          let texto;
-          if (order.payment_method === 'credit_card') {
-            texto = `✅ Pedido Realizado!\n\nPedido: ${order.id}\nTotal: R$ ${parseFloat(order.total).toFixed(2)}${dateTimeStr}\n\nAtenção: Pagamento com cartão será coletado na entrega.\n\nCliente: ${cliente}\nTelefone: ${telefone}\nEndereço: ${endereco}\n\nItens:\n-\n\nObservações: ${order.notes || order.observations || '-'}\n\nObrigado!`;
-          } else if (order.payment_method === 'pix') {
-            texto = `✅ Pagamento Confirmado!\n\nPedido: ${order.id}\nTotal: R$ ${parseFloat(order.total).toFixed(2)}${dateTimeStr}\n\nCliente: ${cliente}\nTelefone: ${telefone}\nEndereço: ${endereco}\n\nItens:\n-\n\nObservações: ${order.notes || order.observations || '-'}\n\nChave PIX: ${order.payment?.qr_code || order.payment?.qrCode || ''}\n\nObrigado!`;
-          } else {
-            texto = `✅ Pedido Realizado!\n\nPedido: ${order.id}\nTotal: R$ ${parseFloat(order.total).toFixed(2)}${dateTimeStr}\n\nCliente: ${cliente}\nTelefone: ${telefone}\nEndereço: ${endereco}\n\nItens:\n-\n\nObservações: ${order.notes || order.observations || '-'}\n\nObrigado!`;
-          }
-          const url = `https://wa.me/5581987508211?text=${encodeURIComponent(texto)}`;
-          window.open(url, '_blank');
-        });
-    });
-  }
+  // GUARDAR o pedido globalmente para usar no listener do botão WhatsApp
+  window.lastOrder = order;
+  currentOrder = order;
+  console.log('✅ window.lastOrder definido:', window.lastOrder);
+  console.log('   ID:', window.lastOrder?.id);
+  console.log('   Total:', window.lastOrder?.total);
+  console.log('   currentOrder também definido');
 }

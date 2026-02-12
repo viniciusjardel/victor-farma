@@ -58,9 +58,26 @@ module.exports = (pool) => {
     try {
       const { userId, items, customerName, customerPhone, deliveryAddress, paymentMethod } = req.body;
 
+      // ✅ LOG DETALHADO DOS DADOS RECEBIDOS
+      console.log('📥 POST /orders - Dados recebidos:', {
+        userId,
+        itemsCount: items?.length,
+        customerName: `"${customerName}" (tipo: ${typeof customerName}, vazio: ${!customerName || customerName.trim() === ''})`,
+        customerPhone: `"${customerPhone}" (tipo: ${typeof customerPhone}, vazio: ${!customerPhone || customerPhone.trim() === ''})`,
+        deliveryAddress: `"${deliveryAddress}" (tipo: ${typeof deliveryAddress}, vazio: ${!deliveryAddress || deliveryAddress.trim() === ''})`,
+        paymentMethod
+      });
+
       // Validar dados
       if (!userId || !items || items.length === 0 || !customerName || !deliveryAddress) {
-        return res.status(400).json({ error: 'Dados inválidos' });
+        console.error('❌ Validação falhou:', { userId, items: !!items, customerName, deliveryAddress });
+        return res.status(400).json({ error: 'Dados inválidos: userId, items, customerName e deliveryAddress são obrigatórios' });
+      }
+
+      // 🔍 VALIDAÇÃO ADICIONAL: Dados vazios/whitespace
+      if (customerName.trim() === '' || deliveryAddress.trim() === '') {
+        console.error('❌ Dados com espaços vazios:', { customerName: customerName.trim(), deliveryAddress: deliveryAddress.trim() });
+        return res.status(400).json({ error: 'Dados inválidos: Nome do cliente e endereço não podem ser vazios' });
       }
 
       // Calcular total
@@ -85,7 +102,7 @@ module.exports = (pool) => {
         `INSERT INTO orders (id, user_id, customer_name, customer_phone, delivery_address, total, payment_method, status, payment_status, created_at)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
          RETURNING *`,
-        [orderId, userId, customerName, customerPhone, deliveryAddress, total, paymentMethod, 'em preparação', paymentStatus, createdAt]
+        [orderId, userId, customerName.trim(), customerPhone?.trim() || '', deliveryAddress.trim(), total, paymentMethod, 'em preparação', paymentStatus, createdAt]
       );
 
       // Adicionar itens do pedido (SEM decrementar estoque ainda)
@@ -105,12 +122,19 @@ module.exports = (pool) => {
       // Limpar carrinho
       await pool.query('DELETE FROM cart_items WHERE user_id = $1', [userId]);
 
+      console.log('✅ Pedido criado com sucesso:', {
+        orderId,
+        customer_name: orderResult.rows[0].customer_name,
+        total: orderResult.rows[0].total,
+        itemsCount: items.length
+      });
+
       res.status(201).json({
         order: orderResult.rows[0],
         message: 'Pedido criado com sucesso'
       });
     } catch (error) {
-      console.error(error);
+      console.error('❌ Erro ao criar pedido:', error.message);
       res.status(500).json({ error: 'Erro ao criar pedido' });
     }
   });

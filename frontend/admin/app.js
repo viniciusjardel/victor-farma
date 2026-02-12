@@ -3,6 +3,51 @@ const API_URL = window.location.hostname === 'localhost'
   ? 'http://localhost:3000/api'
   : 'https://victor-farma.onrender.com/api';
 
+// ============= VERIFICAÇÃO DE AUTENTICAÇÃO =============
+const AUTH_KEY = 'victor_farma_admin_auth';
+
+async function checkAuthentication() {
+  const token = sessionStorage.getItem(AUTH_KEY);
+  if (!token) {
+    console.warn('🔐 Usuário não autenticado. Redirecionando para login...');
+    window.location.href = 'login.html';
+    return false;
+  }
+  
+  try {
+    // Verificar token com o backend
+    console.log('🔍 Verificando autenticação com o servidor...');
+    
+    const response = await fetch(`${API_URL}/auth/verify`, {
+      headers: {
+        'Authorization': `Bearer ${token}`
+      }
+    });
+
+    const data = await response.json();
+
+    if (!response.ok || !data.authenticated) {
+      throw new Error(data.error || 'Token inválido');
+    }
+
+    console.log('✅ Autenticação verificada pelo servidor');
+    return true;
+
+  } catch (error) {
+    console.error('❌ Erro na verificação de autenticação:', error.message);
+    sessionStorage.removeItem(AUTH_KEY);
+    window.location.href = 'login.html';
+    return false;
+  }
+}
+
+// Verificar autenticação ao carregar
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', checkAuthentication);
+} else {
+  checkAuthentication();
+}
+
 let currentSection = 'dashboard';
 let allProducts = [];
 let allOrders = [];
@@ -50,6 +95,16 @@ function showAdminToast(message, type = 'success') {
     console.error('Erro showAdminToast:', e);
     alert(message);
   }
+}
+
+// ============= LOGOUT =============
+function handleLogout() {
+  const confirmed = confirm('Tem certeza que deseja sair? Você será redirecionado para o login.');
+  if (!confirmed) return;
+  
+  console.log('👋 Fazendo logout do painel admin...');
+  sessionStorage.removeItem(AUTH_KEY);
+  window.location.href = 'login.html';
 }
 
 // Event Listeners

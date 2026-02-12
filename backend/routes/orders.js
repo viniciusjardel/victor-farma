@@ -127,11 +127,11 @@ module.exports = (pool) => {
 
       let order = orderResult.rows[0];
 
-      // 🔄 Se tem payment_id, consultar status real da API PIX (Mercado Pago)
+      // 🔄 Se tem payment_id, consultar status real da API PIX (Mercado Pago) — COM TIMEOUT
       if (order.payment_id) {
         try {
           const PIX_API_URL = process.env.PIX_API_URL || 'https://pix-victor-farma.onrender.com';
-          const pixResponse = await axios.get(`${PIX_API_URL}/status/${order.payment_id}`);
+          const pixResponse = await axios.get(`${PIX_API_URL}/status/${order.payment_id}`, { timeout: 5000 });
           
           console.log(`📊 Status do Mercado Pago para ${order.payment_id}:`, pixResponse.data.status);
           
@@ -149,7 +149,7 @@ module.exports = (pool) => {
           }
         } catch (error) {
           console.warn(`⚠️ Erro ao consultar API PIX para ${order.payment_id}:`, error.message);
-          // Continua com o status do banco local se a API falhar
+          // Continua com o status do banco local se a API falhar — NAÃ bloqueia
         }
       }
 
@@ -166,8 +166,9 @@ module.exports = (pool) => {
         items: itemsResult.rows
       });
     } catch (error) {
-      console.error(error);
-      res.status(500).json({ error: 'Erro ao buscar pedido' });
+      console.error('❌ ERRO em GET /orders/:orderId -', error.message);
+      console.error('Stack:', error.stack);
+      res.status(500).json({ error: 'Erro ao buscar pedido', details: error.message });
     }
   });
 

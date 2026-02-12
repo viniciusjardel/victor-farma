@@ -17,14 +17,21 @@ module.exports = (pool) => {
   router.get('/:id', async (req, res) => {
     try {
       const { id } = req.params;
+      console.log(`🔍 Buscando produto: ${id}`);
+      
       const result = await pool.query('SELECT * FROM products WHERE id = $1', [id]);
+      
       if (result.rows.length === 0) {
+        console.warn(`⚠️ Produto não encontrado: ${id}`);
         return res.status(404).json({ error: 'Produto não encontrado' });
       }
+      
+      console.log(`✅ Produto encontrado: ${result.rows[0].name}, stock=${result.rows[0].stock}`);
       res.json(result.rows[0]);
     } catch (error) {
-      console.error(error);
-      res.status(500).json({ error: 'Erro ao buscar produto' });
+      console.error('❌ ERRO em GET /products/:id -', error.message);
+      console.error('Stack:', error.stack);
+      res.status(500).json({ error: 'Erro ao buscar produto', details: error.message });
     }
   });
 

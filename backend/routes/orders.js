@@ -77,9 +77,9 @@ module.exports = (pool) => {
       const orderId = uuidv4();
       const createdAt = new Date().toISOString();
       
-      // Definir status de pagamento como 'pendente' para todos os métodos
-      // O webhook do Mercado Pago atualiza para 'aprovado' quando pagamento é confirmado
-      const paymentStatus = 'pendente';
+      // Definir status de pagamento conforme método
+      // PIX: aprovado (já pago), Cartão: pendente (aguardando confirmação)
+      const paymentStatus = paymentMethod === 'pix' ? 'aprovado' : 'pendente';
       
       const orderResult = await pool.query(
         `INSERT INTO orders (id, user_id, customer_name, customer_phone, delivery_address, total, payment_method, status, payment_status, created_at)
@@ -88,7 +88,7 @@ module.exports = (pool) => {
         [orderId, userId, customerName, customerPhone, deliveryAddress, total, paymentMethod, 'em preparação', paymentStatus, createdAt]
       );
 
-      // Adicionar itens do pedido (SEM decrementar estoque ainda)
+      // Adicionar itens do pedido
       for (const item of items) {
         const productResult = await pool.query('SELECT price FROM products WHERE id = $1', [item.productId]);
         const price = productResult.rows[0].price;
@@ -98,8 +98,20 @@ module.exports = (pool) => {
            VALUES ($1, $2, $3, $4, $5)`,
           [uuidv4(), orderId, item.productId, item.quantity, price]
         );
+      }
 
-        // ⚠️ NÃO decrementar estoque aqui! Só depois que pagamento for confirmado
+      // 📦 Se PIX (já aprovado), decrementar estoque IMEDIATAMENTE
+      if (paymentMethod === 'pix') {
+        try {
+          await decrementarEstoqueDosPedido(orderId);
+          console.log(`✅ Estoque decrementado imediatamente para pedido PIX: ${orderId}`);
+        } catch (error) {
+          console.error(`❌ Erro ao decrementar estoque para PIX: ${orderId}`, error.message);
+          // Se falhar, deletar o pedido para manter consistência
+          await pool.query('DELETE FROM order_items WHERE order_id = $1', [orderId]);
+          await pool.query('DELETE FROM orders WHERE id = $1', [orderId]);
+          return res.status(400).json({ error: 'Erro ao processar estoque. Pedido não foi criado.', details: error.message });
+        }
       }
 
       // Limpar carrinho

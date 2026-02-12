@@ -77,9 +77,9 @@ module.exports = (pool) => {
       const orderId = uuidv4();
       const createdAt = new Date().toISOString();
       
-      // Definir status de pagamento conforme método
-      // PIX: aprovado (já pago), Cartão: pendente (aguardando confirmação)
-      const paymentStatus = paymentMethod === 'pix' ? 'aprovado' : 'pendente';
+      // Definir status de pagamento como 'pendente' para todos os métodos
+      // O webhook do Mercado Pago atualiza para 'aprovado' quando pagamento é confirmado
+      const paymentStatus = 'pendente';
       
       const orderResult = await pool.query(
         `INSERT INTO orders (id, user_id, customer_name, customer_phone, delivery_address, total, payment_method, status, payment_status, created_at)

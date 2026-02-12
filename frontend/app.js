@@ -1733,7 +1733,11 @@ function showConfirmation(order) {
   // Ligar botão WhatsApp no modal de confirmação (adaptar mensagem conforme forma de pagamento)
   const whatsappConfirmBtn = document.getElementById('confirmation-whatsapp-btn');
   if (whatsappConfirmBtn) {
-    whatsappConfirmBtn.addEventListener('click', () => {
+    // Remover listeners antigos para evitar duplicação
+    whatsappConfirmBtn.replaceWith(whatsappConfirmBtn.cloneNode(true));
+    const newBtn = document.getElementById('confirmation-whatsapp-btn');
+    
+    newBtn.addEventListener('click', () => {
       const created = order.created_at || order.createdAt || order.created;
       let dateTimeStr = '';
       if (created) {
@@ -1784,6 +1788,5 @@ function showConfirmation(order) {
           const url = `https://wa.me/5581987508211?text=${encodeURIComponent(texto)}`;
           window.open(url, '_blank');
         });
-    }, { once: true }); // Executar apenas uma vez
-  }
+    });
 }

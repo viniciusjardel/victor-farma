@@ -373,8 +373,8 @@ function displayProducts(productsToDisplay) {
             <p class="text-lg md:text-xl font-bold text-red-600">R$ ${parseFloat(product.price).toFixed(2)}</p>
             <p class="text-xs font-semibold ${product.stock < 10 ? 'text-red-600' : 'text-gray-600'}">Est: ${product.stock}</p>
           </div>
-          <button class="add-to-cart-btn w-full bg-green-600 hover:bg-green-700 btn-hover text-white font-bold py-2 px-3 rounded-lg text-xs md:text-sm transition-all" onclick="addToCart('${product.id}')">
-            ➕ Adicionar
+          <button class="add-to-cart-btn w-full ${product.is_available ? 'bg-green-600 hover:bg-green-700 btn-hover text-white' : 'bg-gray-400 cursor-not-allowed text-white'} font-bold py-2 px-3 rounded-lg text-xs md:text-sm transition-all" onclick="${product.is_available ? `addToCart('${product.id}')` : 'return false'}" ${!product.is_available ? 'disabled' : ''}>
+            ${product.is_available ? '➕ Adicionar' : '❌ Indisponível'}
           </button>
         </div>
       </div>
@@ -396,9 +396,22 @@ function openProductImageModal(productId) {
 
   // Configurar botão de adicionar
   const addBtn = document.getElementById('modal-add-to-cart-btn');
-  addBtn.onclick = () => addToCartFromModal(productId);
-  addBtn.classList.remove('bg-gray-400', 'cursor-not-allowed');
-  addBtn.classList.add('bg-green-600', 'hover:bg-green-700');
+  
+  if (product.is_available) {
+    // Produto disponível
+    addBtn.onclick = () => addToCartFromModal(productId);
+    addBtn.textContent = '➕ Adicionar ao Carrinho';
+    addBtn.classList.remove('bg-gray-400', 'cursor-not-allowed', 'disabled');
+    addBtn.classList.add('bg-green-600', 'hover:bg-green-700');
+    addBtn.disabled = false;
+  } else {
+    // Produto indisponível
+    addBtn.onclick = () => false;
+    addBtn.textContent = '❌ Indisponível - Estoque Esgotado';
+    addBtn.classList.remove('bg-green-600', 'hover:bg-green-700');
+    addBtn.classList.add('bg-gray-400', 'cursor-not-allowed');
+    addBtn.disabled = true;
+  }
 
   // Abrir modal
   productImageModal.classList.remove('hidden');

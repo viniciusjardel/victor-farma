@@ -58,6 +58,16 @@ module.exports = (pool) => {
         return res.status(404).json({ error: 'Produto não encontrado' });
       }
       
+      // Verificar se estoque é 0 (indisponível)
+      if (productCheck.rows[0].stock <= 0) {
+        console.error(`❌ Produto indisponível (estoque = 0): ${productId}`);
+        return res.status(400).json({ 
+          error: 'Produto indisponível - estoque esgotado',
+          available: false,
+          stock: 0
+        });
+      }
+      
       console.log(`🛒 Validação de estoque: stock=${productCheck.rows[0].stock}, quantity=${quantity}`);
       
       if (productCheck.rows[0].stock < quantity) {

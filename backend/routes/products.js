@@ -5,7 +5,9 @@ module.exports = (pool) => {
   // Listar todos os produtos
   router.get('/', async (req, res) => {
     try {
-      const result = await pool.query('SELECT * FROM products ORDER BY name');
+      const result = await pool.query(
+        `SELECT *, (stock > 0) as is_available FROM products ORDER BY name`
+      );
       res.json(result.rows);
     } catch (error) {
       console.error(error);
@@ -19,7 +21,10 @@ module.exports = (pool) => {
       const { id } = req.params;
       console.log(`🔍 Buscando produto: ${id}`);
       
-      const result = await pool.query('SELECT * FROM products WHERE id = $1', [id]);
+      const result = await pool.query(
+        `SELECT *, (stock > 0) as is_available FROM products WHERE id = $1`,
+        [id]
+      );
       
       if (result.rows.length === 0) {
         console.warn(`⚠️ Produto não encontrado: ${id}`);

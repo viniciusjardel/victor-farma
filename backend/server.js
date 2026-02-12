@@ -10,6 +10,16 @@ const PORT = process.env.PORT || 3000;
 app.use(cors());
 app.use(express.json());
 
+// 🔍 Log de DEBUG GLOBAL para TODAS as requisições PATCH
+app.use((req, res, next) => {
+  if (req.method === 'PATCH') {
+    console.log(`\n🔴 [PATCH] ${req.path}`);
+    console.log(`   Body:`, req.body);
+    console.log(`   URL Completa: ${req.baseUrl}${req.path}`);
+  }
+  next();
+});
+
 // Servir arquivos estáticos do frontend
 const path = require('path');
 app.use(express.static(path.join(__dirname, '../frontend')));

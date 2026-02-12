@@ -4,6 +4,55 @@ const { v4: uuidv4 } = require('uuid');
 const axios = require('axios');
 
 module.exports = (pool) => {
+  // Função auxiliar para decrementar estoque quando pagamento é aprovado
+  const decrementarEstoqueDosPedido = async (orderId, client = null) => {
+    const db = client || pool;
+    
+    console.log(`🔄 [DECREMENT] Iniciando decrementação para pedido ${orderId}`);
+    
+    try {
+      // Buscar todos os itens do pedido com estoque atual dos produtos
+      const itemsResult = await db.query(
+        `SELECT oi.product_id, oi.quantity, p.name, p.stock 
+         FROM order_items oi 
+         JOIN products p ON oi.product_id = p.id
+         WHERE oi.order_id = $1`,
+        [orderId]
+      );
+
+      console.log(`📦 Itens encontrados:`, itemsResult.rows.length, itemsResult.rows);
+
+      // Validar se há estoque suficiente para todos os itens
+      for (const item of itemsResult.rows) {
+        if (item.stock < item.quantity) {
+          throw new Error(`Estoque insuficiente para ${item.name}: disponível ${item.stock}, solicitado ${item.quantity}`);
+        }
+      }
+
+      // Decrementar estoque para cada item
+      for (const item of itemsResult.rows) {
+        console.log(`  📉 Decrementando ${item.product_id}: ${item.quantity} unidades (estoque atual: ${item.stock})`);
+        
+        const result = await db.query(
+          `UPDATE products 
+           SET stock = stock - $1 
+           WHERE id = $2
+           RETURNING stock, name`,
+          [item.quantity, item.product_id]
+        );
+
+        if (result.rows[0]) {
+          console.log(`  ✅ Estoque: ${result.rows[0].name} -${item.quantity} unidades (novo total: ${result.rows[0].stock})`);
+        }
+      }
+
+      console.log(`✅ Estoque do pedido ${orderId} decrementado com sucesso!`);
+      return true;
+    } catch (error) {
+      console.error(`❌ Erro ao decrementar estoque do pedido ${orderId}:`, error.message);
+      throw error;
+    }
+  };
   // Criar pedido
   router.post('/', async (req, res) => {
     try {
@@ -208,6 +257,8 @@ module.exports = (pool) => {
     try {
       const { paymentId, status, orderId } = req.body;
 
+      console.log(`🔔 [WEBHOOK] Recebido:`, { paymentId, status, orderId });
+
       if (!paymentId || !status || !orderId) {
         console.warn('Webhook: Dados inválidos -', { paymentId, status, orderId });
         return res.status(400).json({ error: 'Dados inválidos' });
@@ -259,36 +310,12 @@ module.exports = (pool) => {
         if (status === 'approved') {
           console.log(`📦 Decrementando estoque para pedido ${orderId}...`);
           
-          const itemsResult = await client.query(
-            'SELECT oi.product_id, oi.quantity, p.stock FROM order_items oi JOIN products p ON oi.product_id = p.id WHERE oi.order_id = $1',
-            [orderId]
-          );
-
-          // Validar estoque disponível antes de decrementar
-          for (const item of itemsResult.rows) {
-            if (item.stock < item.quantity) {
-              await client.query('ROLLBACK');
-              console.error(`❌ Estoque insuficiente para ${item.product_id}: disponível ${item.stock}, solicitado ${item.quantity}`);
-              return res.status(400).json({ 
-                error: 'Estoque insuficiente',
-                details: `Produto ${item.product_id} tem apenas ${item.stock} unidade(s)`
-              });
-            }
+          try {
+            await decrementarEstoqueDosPedido(orderId, client);
+          } catch (error) {
+            await client.query('ROLLBACK');
+            return res.status(400).json({ error: 'Erro ao decrementar estoque', details: error.message });
           }
-
-          // Decrementar estoque para todos os itens
-          for (const item of itemsResult.rows) {
-            const updateStockResult = await client.query(
-              'UPDATE products SET stock = stock - $1 WHERE id = $2 RETURNING stock',
-              [item.quantity, item.product_id]
-            );
-            
-            if (updateStockResult.rows[0]) {
-              console.log(`  ✅ Produto ${item.product_id}: -${item.quantity} unidades (total: ${updateStockResult.rows[0].stock})`);
-            }
-          }
-
-          console.log(`✅ Estoque decrementado com sucesso para pedido ${orderId}`);
         }
 
         // Confirmar transação
@@ -376,26 +403,70 @@ module.exports = (pool) => {
 
   // Confirmar pagamento PIX
   router.post('/:orderId/confirm-payment', async (req, res) => {
+    let client;
     try {
       const { orderId } = req.params;
-      const result = await pool.query(
-        'UPDATE orders SET payment_status = $1 WHERE id = $2 RETURNING *',
-        ['aprovado', orderId]
-      );
 
-      if (result.rows.length === 0) {
-        return res.status(404).json({ error: 'Pedido não encontrado' });
+      client = await pool.connect();
+
+      try {
+        // Iniciar transação
+        await client.query('BEGIN');
+
+        // Buscar status atual do pedido
+        const currentResult = await client.query(
+          'SELECT payment_status FROM orders WHERE id = $1 FOR UPDATE',
+          [orderId]
+        );
+
+        if (currentResult.rows.length === 0) {
+          await client.query('ROLLBACK');
+          return res.status(404).json({ error: 'Pedido não encontrado' });
+        }
+
+        const statusAnterior = currentResult.rows[0].payment_status;
+
+        // Atualizar status de pagamento
+        const result = await client.query(
+          'UPDATE orders SET payment_status = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2 RETURNING *',
+          ['aprovado', orderId]
+        );
+
+        // 📦 Se payment_status mudou para "aprovado" E o status anterior não era "aprovado", decrementar estoque
+        if (statusAnterior !== 'aprovado') {
+          console.log(`📦 Decrementando estoque para pedido ${orderId}...`);
+          
+          try {
+            await decrementarEstoqueDosPedido(orderId, client);
+          } catch (error) {
+            await client.query('ROLLBACK');
+            return res.status(400).json({ error: 'Erro ao decrementar estoque', details: error.message });
+          }
+        }
+
+        // Confirmar transação
+        await client.query('COMMIT');
+
+        res.json({ 
+          message: 'Pagamento confirmado e estoque atualizado',
+          order: result.rows[0],
+          estoqueDecrementado: statusAnterior !== 'aprovado'
+        });
+      } catch (error) {
+        await client.query('ROLLBACK');
+        throw error;
+      } finally {
+        client.release();
       }
-
-      res.json({ message: 'Pagamento confirmado', order: result.rows[0] });
     } catch (error) {
       console.error(error);
-      res.status(500).json({ error: 'Erro ao confirmar pagamento' });
+      res.status(500).json({ error: 'Erro ao confirmar pagamento', details: error.message });
     }
   });
 
   // 🧪 ENDPOINT DE TESTE: Simula webhook de pagamento confirmado (REMOVER EM PRODUÇÃO)
   router.post('/test-webhook/:orderId', async (req, res) => {
+    let client;
     try {
       const { orderId } = req.params;
       
@@ -414,22 +485,49 @@ module.exports = (pool) => {
       
       console.log(`🧪 [TEST] Simulando webhook para orderId: ${orderId}, paymentId: ${paymentId}`);
       
-      // Chamar o webhook como se fosse o serviço PIX
-      const updateResult = await pool.query(
-        'UPDATE orders SET payment_status = $1, status = $2 WHERE id = $3 RETURNING *',
-        ['approved', 'confirmed', orderId]
-      );
-      
-      console.log(`✅ [TEST] Pedido ${orderId} atualizado para CONFIRMED`);
-      
-      res.json({
-        message: '✅ Pagamento simulado com sucesso',
-        order: updateResult.rows[0]
-      });
+      client = await pool.connect();
+
+      try {
+        // Iniciar transação
+        await client.query('BEGIN');
+
+        // Atualizar status
+        const updateResult = await client.query(
+          'UPDATE orders SET payment_status = $1, status = $2, updated_at = CURRENT_TIMESTAMP WHERE id = $3 RETURNING *',
+          ['aprovado', 'em preparação', orderId]
+        );
+        
+        // Decrementar estoque se o status anterior não era 'aprovado'
+        if (order.payment_status !== 'aprovado') {
+          console.log(`📦 [TEST] Decrementando estoque do pedido ${orderId}...`);
+          
+          try {
+            await decrementarEstoqueDosPedido(orderId, client);
+          } catch (error) {
+            await client.query('ROLLBACK');
+            return res.status(400).json({ error: 'Erro ao decrementar estoque', details: error.message });
+          }
+        }
+
+        await client.query('COMMIT');
+        
+        console.log(`✅ [TEST] Pedido ${orderId} atualizado para APROVADO com estoque decrementado`);
+        
+        res.json({
+          message: '✅ Pagamento simulado com sucesso e estoque decrementado',
+          order: updateResult.rows[0],
+          estoqueDecrementado: order.payment_status !== 'aprovado'
+        });
+      } catch (error) {
+        await client.query('ROLLBACK');
+        throw error;
+      } finally {
+        client.release();
+      }
       
     } catch (error) {
       console.error('❌ Erro no test-webhook:', error);
-      res.status(500).json({ error: 'Erro ao processar test-webhook' });
+      res.status(500).json({ error: 'Erro ao processar test-webhook', details: error.message });
     }
   });
 
@@ -609,9 +707,12 @@ module.exports = (pool) => {
 
   // Atualizar ambos os status (pedido e pagamento) simultaneamente
   router.patch('/:orderId', async (req, res) => {
+    let client;
     try {
       const { orderId } = req.params;
       const { status, payment_status } = req.body;
+
+      console.log(`📝 [GENERIC PATCH] Atualizando pedido ${orderId} com:`, { status, payment_status });
 
       // Valores aceitos em português
       const statusValidos = ['em preparação', 'em rota de entrega', 'entregue', 'cancelado'];
@@ -631,48 +732,85 @@ module.exports = (pool) => {
         });
       }
 
-      // Buscar o pedido atual para verificação
-      const currentResult = await pool.query(
-        'SELECT * FROM orders WHERE id = $1',
-        [orderId]
-      );
+      client = await pool.connect();
 
-      if (currentResult.rows.length === 0) {
-        return res.status(404).json({ error: 'Pedido não encontrado' });
-      }
+      try {
+        // Iniciar transação
+        await client.query('BEGIN');
 
-      let updateQuery = 'UPDATE orders SET';
-      let params = [];
-      let paramCount = 1;
+        // Buscar o pedido atual para verificação
+        const currentResult = await client.query(
+          'SELECT * FROM orders WHERE id = $1 FOR UPDATE',
+          [orderId]
+        );
 
-      if (status) {
-        updateQuery += ` status = $${paramCount}`;
-        params.push(status);
-        paramCount++;
-      }
-
-      if (payment_status) {
-        if (status) {
-          updateQuery += ', ';
+        if (currentResult.rows.length === 0) {
+          await client.query('ROLLBACK');
+          return res.status(404).json({ error: 'Pedido não encontrado' });
         }
-        updateQuery += ` payment_status = $${paramCount}`;
-        params.push(payment_status);
-        paramCount++;
+
+        const currentOrder = currentResult.rows[0];
+        const statusAnterior = currentOrder.payment_status;
+
+        let updateQuery = 'UPDATE orders SET';
+        let params = [];
+        let paramCount = 1;
+
+        if (status) {
+          updateQuery += ` status = $${paramCount}`;
+          params.push(status);
+          paramCount++;
+        }
+
+        if (payment_status) {
+          if (status) {
+            updateQuery += ', ';
+          }
+          updateQuery += ` payment_status = $${paramCount}`;
+          params.push(payment_status);
+          paramCount++;
+        }
+
+        updateQuery += `, updated_at = CURRENT_TIMESTAMP WHERE id = $${paramCount} RETURNING *`;
+        params.push(orderId);
+
+        const result = await client.query(updateQuery, params);
+
+        // 🎯 Se payment_status mudou para "aprovado" E o status anterior não era "aprovado", decrementar estoque
+        console.log(`🔍 Verificando: payment_status=${payment_status} && statusAnterior=${statusAnterior}`);
+        
+        if (payment_status === 'aprovado' && statusAnterior !== 'aprovado') {
+          console.log(`🛒 ✅ CONFIRMADO! Decrementando estoque do pedido ${orderId}...`);
+          
+          try {
+            await decrementarEstoqueDosPedido(orderId, client);
+          } catch (error) {
+            console.error(`❌ Erro na decrementação:`, error.message);
+            await client.query('ROLLBACK');
+            return res.status(400).json({ error: 'Erro ao decrementar estoque', details: error.message });
+          }
+        } else {
+          console.log(`⚠️ Condição não atendida. payment_status=${payment_status}, statusAnterior=${statusAnterior}`);
+        }
+
+        // Confirmar transação
+        await client.query('COMMIT');
+
+        console.log(`✅ Pedido ${orderId} atualizado - Status: ${status || 'não alterado'}, Pagamento: ${payment_status || 'não alterado'}`);
+        res.json({
+          message: 'Status atualizado com sucesso',
+          order: result.rows[0],
+          estoqueDecrementado: payment_status === 'aprovado' && statusAnterior !== 'aprovado'
+        });
+      } catch (error) {
+        await client.query('ROLLBACK');
+        throw error;
+      } finally {
+        client.release();
       }
-
-      updateQuery += `, updated_at = CURRENT_TIMESTAMP WHERE id = $${paramCount} RETURNING *`;
-      params.push(orderId);
-
-      const result = await pool.query(updateQuery, params);
-
-      console.log(`✅ Pedido ${orderId} atualizado - Status: ${status || 'não alterado'}, Pagamento: ${payment_status || 'não alterado'}`);
-      res.json({
-        message: 'Status atualizado com sucesso',
-        order: result.rows[0]
-      });
     } catch (error) {
       console.error('Erro ao atualizar pedido:', error);
-      res.status(500).json({ error: 'Erro ao atualizar pedido' });
+      res.status(500).json({ error: 'Erro ao atualizar pedido', details: error.message });
     }
   });
 
@@ -712,9 +850,12 @@ module.exports = (pool) => {
 
   // Atualizar status de pagamento (admin)
   router.patch('/:orderId/payment-status', async (req, res) => {
+    let client;
     try {
       const { orderId } = req.params;
       const { novoStatus } = req.body;
+
+      console.log(`📝 [PAYMENT-STATUS] Atualizando pagamento para: ${novoStatus}`);
 
       const statusValidos = ['aprovado', 'pendente', 'cancelado'];
       if (!statusValidos.includes(novoStatus)) {
@@ -724,23 +865,67 @@ module.exports = (pool) => {
         });
       }
 
-      const result = await pool.query(
-        'UPDATE orders SET payment_status = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2 RETURNING *',
-        [novoStatus, orderId]
-      );
+      client = await pool.connect();
 
-      if (result.rows.length === 0) {
-        return res.status(404).json({ error: 'Pedido não encontrado' });
+      try {
+        // Iniciar transação
+        await client.query('BEGIN');
+
+        // Buscar status atual do pedido
+        const currentResult = await client.query(
+          'SELECT payment_status FROM orders WHERE id = $1 FOR UPDATE',
+          [orderId]
+        );
+
+        if (currentResult.rows.length === 0) {
+          await client.query('ROLLBACK');
+          return res.status(404).json({ error: 'Pedido não encontrado' });
+        }
+
+        const statusAnterior = currentResult.rows[0].payment_status;
+        console.log(`📊 Status anterior: ${statusAnterior}, novo status: ${novoStatus}`);
+
+        // Atualizar status de pagamento
+        const result = await client.query(
+          'UPDATE orders SET payment_status = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2 RETURNING *',
+          [novoStatus, orderId]
+        );
+
+        // 🎯 Se payment_status mudou para "aprovado" E o status anterior não era "aprovado", decrementar estoque
+        console.log(`🔍 Verificando: novoStatus=${novoStatus} && statusAnterior=${statusAnterior}`);
+        
+        if (novoStatus === 'aprovado' && statusAnterior !== 'aprovado') {
+          console.log(`🛒 ✅ CONFIRMADO! Decrementando estoque do pedido ${orderId}...`);
+          
+          try {
+            await decrementarEstoqueDosPedido(orderId, client);
+          } catch (error) {
+            console.error(`❌ Erro na decrementação:`, error.message);
+            await client.query('ROLLBACK');
+            return res.status(400).json({ error: 'Erro ao decrementar estoque', details: error.message });
+          }
+        } else {
+          console.log(`⚠️ Condição não atendida. novoStatus=${novoStatus}, statusAnterior=${statusAnterior}`);
+        }
+
+        // Confirmar transação
+        await client.query('COMMIT');
+
+        console.log(`✅ Status de pagamento do pedido ${orderId} atualizado para: ${novoStatus}`);
+        res.json({
+          message: 'Status de pagamento atualizado com sucesso',
+          pedido: result.rows[0],
+          estoqueDecrementado: novoStatus === 'aprovado' && statusAnterior !== 'aprovado'
+        });
+      } catch (error) {
+        await client.query('ROLLBACK');
+        throw error;
+      } finally {
+        client.release();
       }
-
-      console.log(`✅ Status de pagamento do pedido ${orderId} atualizado para: ${novoStatus}`);
-      res.json({
-        message: 'Status de pagamento atualizado com sucesso',
-        pedido: result.rows[0]
-      });
     } catch (error) {
       console.error('Erro ao atualizar status de pagamento:', error);
-      res.status(500).json({ error: 'Erro ao atualizar status de pagamento' });
+      res.status(500).json({ error: 'Erro ao atualizar status de pagamento', details: error.message });
     }
   });
 

@@ -1425,7 +1425,7 @@ function startPaymentPolling(paymentId, orderId) {
       // Atualizar texto de status no modal
       const statusEl = modal.querySelector('#pix-status-msg');
       if (statusEl) {
-        if (order.status === 'confirmed' && order.payment_status === 'approved') {
+        if ((order.status === 'confirmed' || order.status === 'em preparação') && (order.payment_status === 'approved' || order.payment_status === 'aprovado')) {
           console.log('✅ CONFIRMADO! Atualizando visual...');
           statusEl.innerHTML = '✅ Pagamento confirmado!';
           statusEl.style.color = '#10b981';
@@ -1437,7 +1437,7 @@ function startPaymentPolling(paymentId, orderId) {
       }
 
       // Se pagamento foi confirmado (webhook atualiza status)
-      if (order.status === 'confirmed' && order.payment_status === 'approved') {
+      if ((order.status === 'confirmed' || order.status === 'em preparação') && (order.payment_status === 'approved' || order.payment_status === 'aprovado')) {
         console.log('✅ Pagamento confirmado via polling!');
         clearInterval(paymentPollingInterval);
         completePixPayment(order);
@@ -1478,7 +1478,7 @@ async function checkOrderStatus(orderId) {
       statusEl.textContent = `Status atual: ${statusLabel(order.status)} (${order.payment_status || 'n/a'})`;
     }
 
-    if (order.status === 'confirmed' && order.payment_status === 'approved') {
+    if ((order.status === 'confirmed' || order.status === 'em preparação') && (order.payment_status === 'approved' || order.payment_status === 'aprovado')) {
       clearInterval(paymentPollingInterval);
       completePixPayment(order);
     }

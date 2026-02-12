@@ -297,14 +297,16 @@ module.exports = (pool) => {
           return res.json({ message: 'Pedido já processado' });
         }
 
-        // Atualizar apenas payment_status e payment_id
+        // Atualizar payment_status, payment_id e status do pedido quando aprovado
+        let statusAtualizado = status === 'approved' ? 'confirmed' : 'pending';
+        
         const updateResult = await client.query(
-          'UPDATE orders SET payment_status = $1, payment_id = $2 WHERE id = $3 RETURNING *',
-          [paymentStatus, paymentId, orderId]
+          'UPDATE orders SET payment_status = $1, payment_id = $2, status = $3 WHERE id = $4 RETURNING *',
+          [paymentStatus, paymentId, statusAtualizado, orderId]
         );
 
         const order = updateResult.rows[0];
-        console.log(`✅ Webhook PIX: Pedido ${orderId} - payment_status atualizado para: ${paymentStatus}`);
+        console.log(`✅ Webhook PIX: Pedido ${orderId} - payment_status atualizado para: ${paymentStatus}, status do pedido: ${statusAtualizado}`);
 
         // 📦 Se pagamento foi aprovado, decrementar estoque
         if (status === 'approved') {

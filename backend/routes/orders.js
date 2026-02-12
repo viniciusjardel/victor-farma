@@ -204,6 +204,7 @@ module.exports = (pool) => {
 
   // Webhook: PIX service notifica quando pagamento é confirmado
   router.post('/webhook/payment', async (req, res) => {
+    let client;
     try {
       const { paymentId, status, orderId } = req.body;
 
@@ -218,49 +219,96 @@ module.exports = (pool) => {
         paymentStatus = 'aprovado';
       }
 
-      // Atualizar apenas payment_status e payment_id (não alterar status do pedido)
-      const updateResult = await pool.query(
-        'UPDATE orders SET payment_status = $1, payment_id = $2 WHERE id = $3 RETURNING *',
-        [paymentStatus, paymentId, orderId]
-      );
+      client = await pool.connect();
 
-      if (updateResult.rows.length === 0) {
-        console.warn(`Webhook: Pedido com ID ${orderId} não encontrado`);
-        return res.json({ message: 'Processado' });
-      }
+      try {
+        // Iniciar transação para garantir integridade
+        await client.query('BEGIN');
 
-      const order = updateResult.rows[0];
-      console.log(`✅ Webhook PIX: Pedido ${orderId} - payment_status atualizado para: ${paymentStatus}`);
-
-      // 📦 Se pagamento foi aprovado, decrementar estoque
-      if (status === 'approved') {
-        console.log(`📦 Decrementando estoque para pedido ${orderId}...`);
-        
-        const itemsResult = await pool.query(
-          'SELECT product_id, quantity FROM order_items WHERE order_id = $1',
+        // Buscar o pedido primeiro
+        const orderCheckResult = await client.query(
+          'SELECT payment_status FROM orders WHERE id = $1 FOR UPDATE',
           [orderId]
         );
 
-        for (const item of itemsResult.rows) {
-          const updateStockResult = await pool.query(
-            'UPDATE products SET stock = stock - $1 WHERE id = $2 RETURNING stock',
-            [item.quantity, item.product_id]
-          );
-          
-          if (updateStockResult.rows[0]) {
-            console.log(`  ✓ Produto ${item.product_id}: -${item.quantity} unidades (total: ${updateStockResult.rows[0].stock})`);
-          }
+        if (orderCheckResult.rows.length === 0) {
+          await client.query('ROLLBACK');
+          console.warn(`Webhook: Pedido com ID ${orderId} não encontrado`);
+          return res.json({ message: 'Processado - Pedido não encontrado' });
         }
-      }
 
-      res.json({ 
-        message: 'Webhook processado com sucesso',
-        order
-      });
+        const currentPaymentStatus = orderCheckResult.rows[0].payment_status;
+
+        // Se já foi processado, não processar novamente
+        if (currentPaymentStatus === 'aprovado') {
+          await client.query('ROLLBACK');
+          console.log(`⚠️ Webhook PIX: Pedido ${orderId} já foi processado anteriormente`);
+          return res.json({ message: 'Pedido já processado' });
+        }
+
+        // Atualizar apenas payment_status e payment_id
+        const updateResult = await client.query(
+          'UPDATE orders SET payment_status = $1, payment_id = $2 WHERE id = $3 RETURNING *',
+          [paymentStatus, paymentId, orderId]
+        );
+
+        const order = updateResult.rows[0];
+        console.log(`✅ Webhook PIX: Pedido ${orderId} - payment_status atualizado para: ${paymentStatus}`);
+
+        // 📦 Se pagamento foi aprovado, decrementar estoque
+        if (status === 'approved') {
+          console.log(`📦 Decrementando estoque para pedido ${orderId}...`);
+          
+          const itemsResult = await client.query(
+            'SELECT oi.product_id, oi.quantity, p.stock FROM order_items oi JOIN products p ON oi.product_id = p.id WHERE oi.order_id = $1',
+            [orderId]
+          );
+
+          // Validar estoque disponível antes de decrementar
+          for (const item of itemsResult.rows) {
+            if (item.stock < item.quantity) {
+              await client.query('ROLLBACK');
+              console.error(`❌ Estoque insuficiente para ${item.product_id}: disponível ${item.stock}, solicitado ${item.quantity}`);
+              return res.status(400).json({ 
+                error: 'Estoque insuficiente',
+                details: `Produto ${item.product_id} tem apenas ${item.stock} unidade(s)`
+              });
+            }
+          }
+
+          // Decrementar estoque para todos os itens
+          for (const item of itemsResult.rows) {
+            const updateStockResult = await client.query(
+              'UPDATE products SET stock = stock - $1 WHERE id = $2 RETURNING stock',
+              [item.quantity, item.product_id]
+            );
+            
+            if (updateStockResult.rows[0]) {
+              console.log(`  ✅ Produto ${item.product_id}: -${item.quantity} unidades (total: ${updateStockResult.rows[0].stock})`);
+            }
+          }
+
+          console.log(`✅ Estoque decrementado com sucesso para pedido ${orderId}`);
+        }
+
+        // Confirmar transação
+        await client.query('COMMIT');
+
+        res.json({ 
+          message: 'Webhook processado com sucesso',
+          order
+        });
+
+      } catch (error) {
+        await client.query('ROLLBACK');
+        throw error;
+      } finally {
+        client.release();
+      }
 
     } catch (error) {
       console.error('Erro no webhook de pagamento:', error.message);
-      res.status(500).json({ error: 'Erro ao processar webhook' });
+      res.status(500).json({ error: 'Erro ao processar webhook', details: error.message });
     }
   });
 

@@ -329,7 +329,77 @@ async function debugDeleteProduct(productId) {
     alert(msg);
   } catch (error) {
     console.error('❌ Erro ao diagnosticar:', error);
-    alert(`Erro ao diagnosticar: ${error.message}`);
+    showProductDiagnosisModal({
+      title: 'Erro ao diagnosticar',
+      error: true,
+      message: error.message || String(error)
+    });
+  }
+}
+
+// Mostra um modal estilizado com o diagnóstico do produto
+function showProductDiagnosisModal(data) {
+  try {
+    // remover modal antigo se existir
+    const existing = document.getElementById('product-diagnosis-modal');
+    if (existing) existing.remove();
+
+    const modal = document.createElement('div');
+    modal.id = 'product-diagnosis-modal';
+    modal.className = 'fixed inset-0 z-50 flex items-center justify-center p-4';
+    modal.innerHTML = `
+      <div class="absolute inset-0 bg-black opacity-50"></div>
+      <div class="relative max-w-lg w-full bg-gray-900 text-white rounded-lg shadow-xl overflow-hidden">
+        <div class="px-6 py-4 border-b border-gray-800 flex items-start gap-4">
+          <div class="flex-shrink-0 bg-green-600 rounded-full w-10 h-10 flex items-center justify-center text-xl">📊</div>
+          <div class="flex-1">
+            <div class="font-bold text-lg">Diagnóstico</div>
+            <div class="text-sm text-green-200 mt-1">${data.title || (data.product ? data.product.name : '')}</div>
+          </div>
+          <button id="product-diagnosis-close" class="text-gray-300 hover:text-white">×</button>
+        </div>
+        <div class="p-6 space-y-4 text-sm text-gray-100">
+          ${data.error ? `<div class="text-red-400">${data.message}</div>` : `
+            <div class="flex items-center justify-between bg-gray-800 rounded p-3">
+              <div class="font-semibold">Produto</div>
+              <div class="text-gray-200">${data.product ? data.product.name : 'NÃO ENCONTRADO'}</div>
+            </div>
+            <div class="flex items-center justify-between bg-gray-800 rounded p-3">
+              <div>Referências em carrinho</div>
+              <div class="font-bold text-green-300">${data.cartItems}</div>
+            </div>
+            <div class="flex items-center justify-between bg-gray-800 rounded p-3">
+              <div>Referências em pedidos</div>
+              <div class="font-bold text-green-300">${data.orderItems}</div>
+            </div>
+            <div class="flex items-center justify-between bg-gray-800 rounded p-3">
+              <div>Pode deletar</div>
+              <div class="font-bold ${data.canDelete ? 'text-green-300' : 'text-red-400'}">${data.canDelete ? 'SIM' : 'NÃO'}</div>
+            </div>
+            ${data.dependencies ? `
+              <div class="mt-2 text-xs text-gray-400">Detalhes:</div>
+              <div class="max-h-40 overflow-auto bg-gray-800 rounded p-3 text-xs space-y-2">
+                <div><strong>Carrinho:</strong> ${JSON.stringify(data.dependencies.cartItems)}</div>
+                <div><strong>Pedidos:</strong> ${JSON.stringify(data.dependencies.orderItems)}</div>
+              </div>
+            ` : ''}
+          `}
+        </div>
+        <div class="px-6 py-4 bg-gray-800 flex justify-end gap-3">
+          <button id="product-diagnosis-ok" class="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded">OK</button>
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(modal);
+
+    const removeModal = () => { const el = document.getElementById('product-diagnosis-modal'); if (el) el.remove(); };
+    document.getElementById('product-diagnosis-close').addEventListener('click', removeModal);
+    document.getElementById('product-diagnosis-ok').addEventListener('click', removeModal);
+    modal.addEventListener('click', (e) => { if (e.target === modal) removeModal(); });
+  } catch (e) {
+    console.error('Erro ao renderizar modal de diagnóstico:', e);
+    alert(data.error ? data.message : JSON.stringify(data));
   }
 }
 

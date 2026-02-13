@@ -171,6 +171,19 @@ module.exports = (pool) => {
             order = updateResult.rows[0];
             console.log(`✅ Pedido ${orderId} atualizado para aprovado`);
             
+            // Inserir na tabela de receita (se ainda não existir)
+            try {
+              await pool.query(
+                `INSERT INTO revenue (order_id, amount, status)
+                 VALUES ($1, $2, $3)
+                 ON CONFLICT (order_id) DO NOTHING`,
+                [orderId, order.total, 'aprovado']
+              );
+              console.log(`💰 Receita registrada para pedido ${orderId}: R$ ${order.total}`);
+            } catch (revErr) {
+              console.error(`⚠️ Erro ao inserir receita para pedido ${orderId}:`, revErr.message);
+            }
+
             // 📦 Também decrementar estoque AQUI como fallback (evita webhook demorada)
             try {
               console.log(`📦 Decrementando estoque do pedido via GET endpoint...`);
@@ -352,6 +365,22 @@ module.exports = (pool) => {
           } catch (error) {
             await client.query('ROLLBACK');
             return res.status(400).json({ error: 'Erro ao decrementar estoque', details: error.message });
+          }
+        
+          // Inserir registro de receita dentro da mesma transação
+          try {
+            await client.query(
+              `INSERT INTO revenue (order_id, amount, status)
+               VALUES ($1, $2, $3)
+               ON CONFLICT (order_id) DO NOTHING`,
+              [orderId, order.total, 'aprovado']
+            );
+            console.log(`💰 Receita registrada (webhook) para pedido ${orderId}: R$ ${order.total}`);
+          } catch (revErr) {
+            // Se falhar na inserção da receita, abortar para garantir consistência
+            await client.query('ROLLBACK');
+            console.error(`❌ Erro ao inserir receita para pedido ${orderId} no webhook:`, revErr.message);
+            return res.status(500).json({ error: 'Erro ao registrar receita', details: revErr.message });
           }
         }
 

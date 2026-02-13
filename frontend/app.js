@@ -810,13 +810,33 @@ async function addToCartWithQuantity(productId, quantity) {
       });
 
       await new Promise(resolve => {
-        clone.addEventListener('transitionend', function onend(e) {
-          if (e.propertyName.includes('transform')) {
-            clone.removeEventListener('transitionend', onend);
-            clone.remove();
-            resolve();
+        let settled = false;
+
+        const cleanup = () => {
+          if (settled) return;
+          settled = true;
+          try { clone.remove(); } catch (e) { /* ignore */ }
+          clone.removeEventListener('transitionend', onEnd);
+          clone.removeEventListener('webkitTransitionEnd', onEnd);
+          clearTimeout(timeout);
+          resolve();
+        };
+
+        function onEnd(e) {
+          const prop = (e && e.propertyName) ? String(e.propertyName).toLowerCase() : '';
+          if (prop.includes('transform')) {
+            cleanup();
           }
-        });
+        }
+
+        clone.addEventListener('transitionend', onEnd);
+        clone.addEventListener('webkitTransitionEnd', onEnd);
+
+        // Fallback: caso o evento não seja disparado no mobile, prosseguir após timeout
+        const timeout = setTimeout(() => {
+          console.warn('⚠️ transitionend não disparado para clone; prosseguindo após timeout');
+          cleanup();
+        }, 900);
       });
     }
 

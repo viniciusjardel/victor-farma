@@ -266,7 +266,61 @@ document.addEventListener('DOMContentLoaded', () => {
   loadProducts();
   initUserOrders();
   initPhoneInput();
+  initCategoryDropdown();
 });
+
+// ====== CUSTOM CATEGORY DROPDOWN INITIALIZER ======
+function initCategoryDropdown() {
+  const select = document.getElementById('category-filter');
+  const toggle = document.getElementById('category-toggle');
+  const dropdown = document.getElementById('category-dropdown');
+  if (!select || !toggle || !dropdown) return;
+
+  // Helper to set active item
+  function setActive(value) {
+    // update native select
+    select.value = value || '';
+    // update toggle label
+    const label = value ? (dropdown.querySelector(`.category-item[data-value="${value}"] .label`)?.textContent || 'Categorias dos Produtos') : 'Categorias dos Produtos';
+    toggle.innerHTML = `${label} <span class="text-green-600">▾</span>`;
+
+    // update radio states
+    dropdown.querySelectorAll('.category-item').forEach(item => {
+      const v = item.getAttribute('data-value');
+      const radio = item.querySelector('.radio');
+      if (v === value) radio.classList.add('active'); else radio.classList.remove('active');
+    });
+
+    filterProducts();
+  }
+
+  // Click item
+  dropdown.querySelectorAll('.category-item').forEach(item => {
+    item.addEventListener('click', () => {
+      const v = item.getAttribute('data-value');
+      setActive(v);
+      dropdown.classList.add('hidden');
+    });
+  });
+
+  // Toggle dropdown
+  toggle.addEventListener('click', (e) => {
+    e.stopPropagation();
+    dropdown.classList.toggle('hidden');
+  });
+
+  // Close on outside click
+  document.addEventListener('click', (e) => {
+    if (!dropdown.classList.contains('hidden')) {
+      if (!dropdown.contains(e.target) && e.target !== toggle) {
+        dropdown.classList.add('hidden');
+      }
+    }
+  });
+
+  // Initialize from select value (if any)
+  setActive(select.value || '');
+}
 
 // ====== INIT PHONE INPUT (DDD 81 + leading 9 fixed, require 8 digits after prefix) ======
 function initPhoneInput() {

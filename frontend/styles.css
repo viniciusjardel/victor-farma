@@ -822,3 +822,50 @@ main {
     font-size: 11px;
   }
 }
+
+/* Custom category dropdown styles */
+.category-dropdown {
+  position: absolute;
+  left: 0;
+  right: 0;
+  background: linear-gradient(180deg, #0f1724, #12202b);
+  color: #e6eef0;
+  border-radius: 12px;
+  box-shadow: 0 12px 30px rgba(2,6,23,0.6);
+  overflow: hidden;
+  z-index: 60;
+  padding: 8px;
+}
+
+.category-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: background 160ms, transform 120ms;
+  gap: 8px;
+}
+
+.category-item + .category-item { margin-top: 8px; }
+
+.category-item:hover {
+  background: linear-gradient(90deg, rgba(16,185,129,0.06), rgba(6,182,212,0.03));
+  transform: translateY(-2px);
+}
+
+.category-left { display:flex; align-items:center; gap:10px; }
+.category-left .emoji { font-size:18px; }
+.category-left .label { font-weight:600; color: #f1f9f7; }
+
+.category-right .radio {
+  width:18px; height:18px; border-radius:50%; border:2px solid rgba(255,255,255,0.25); display:inline-block; position:relative;
+}
+.category-right .radio.active { border-color:#34d399; background: radial-gradient(circle at 50% 50%, #34d399 35%, transparent 36%); }
+
+/* Small screens - full width dropdown */
+@media (max-width: 640px) {
+  .category-dropdown { left: 0; right: 0; padding: 10px; }
+  .category-item { padding: 10px; }
+}

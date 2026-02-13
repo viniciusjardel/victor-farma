@@ -265,7 +265,87 @@ if (productImageModal) {
 document.addEventListener('DOMContentLoaded', () => {
   loadProducts();
   initUserOrders();
+  initPhoneInput();
 });
+
+// ====== INIT PHONE INPUT (DDD 81 + leading 9 fixed, require 8 digits after prefix) ======
+function initPhoneInput() {
+  const phoneEl = document.getElementById('customer-phone');
+  if (!phoneEl) return;
+
+  const PREFIX = '819'; // DDD 81 + leading 9 fixed
+  const EXTRA_DIGITS = 8; // exactly 8 digits after prefix
+
+  function setCaretToEnd(el) {
+    try {
+      el.selectionStart = el.selectionEnd = el.value.length;
+    } catch (e) { /* ignore */ }
+  }
+
+  // Initialize
+  if (!phoneEl.value || !phoneEl.value.startsWith(PREFIX)) {
+    phoneEl.value = PREFIX;
+  }
+
+  phoneEl.addEventListener('focus', () => {
+    if (!phoneEl.value.startsWith(PREFIX)) phoneEl.value = PREFIX;
+    setCaretToEnd(phoneEl);
+  });
+
+  // Prevent deleting the prefix and allow only digits, limit total length
+  phoneEl.addEventListener('keydown', (e) => {
+    const key = e.key;
+    const selStart = phoneEl.selectionStart;
+    const selEnd = phoneEl.selectionEnd;
+
+    // Allow control/navigation keys
+    const allowed = ['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Tab','Home','End'];
+    if (allowed.includes(key)) return;
+
+    // Prevent backspace/delete that would remove prefix
+    if ((key === 'Backspace' || key === 'Delete')) {
+      if (selStart < PREFIX.length) {
+        e.preventDefault();
+        return;
+      }
+      return; // allow deletion after prefix
+    }
+
+    // Allow only digits
+    if (!/\d/.test(key)) {
+      e.preventDefault();
+      return;
+    }
+
+    // Enforce max digits
+    const digits = phoneEl.value.replace(/\D/g, '');
+    if (digits.length >= PREFIX.length + EXTRA_DIGITS) {
+      e.preventDefault();
+      return;
+    }
+  });
+
+  // Normalize input on any change: strip non-digits, ensure prefix, trim to max
+  phoneEl.addEventListener('input', () => {
+    let digits = phoneEl.value.replace(/\D/g, '');
+    if (!digits.startsWith(PREFIX)) {
+      // If user removed prefix, restore it
+      if (digits.length < PREFIX.length) digits = PREFIX;
+      else digits = PREFIX + digits.slice(PREFIX.length);
+    }
+    digits = digits.slice(0, PREFIX.length + EXTRA_DIGITS);
+    phoneEl.value = digits;
+  });
+
+  // Handle paste: only keep digits and enforce prefix + max
+  phoneEl.addEventListener('paste', (e) => {
+    e.preventDefault();
+    const text = (e.clipboardData || window.clipboardData).getData('text') || '';
+    const pasted = text.replace(/\D/g, '').slice(0, EXTRA_DIGITS);
+    phoneEl.value = PREFIX + pasted;
+    setCaretToEnd(phoneEl);
+  });
+}
 
 // ------------------- Meus Pedidos -------------------
 let userOrders = [];
@@ -1148,6 +1228,14 @@ async function handleCheckoutFormSubmit(e) {
     return;
   }
 
+  // Normalizar e validar telefone: deve começar com 819 e ter exatamente 8 dígitos após o prefixo
+  const normalizedPhone = customerPhone.replace(/\D/g, '');
+  if (!normalizedPhone.startsWith('819') || normalizedPhone.length !== 11) {
+    notify.error('Telefone inválido: digite exatamente 8 números após o prefixo 819');
+    console.error('❌ Telefone inválido:', normalizedPhone);
+    return;
+  }
+
   if (!deliveryAddress) {
     notify.error('Por favor, preencha o endereço de entrega');
     console.error('❌ Endereço vazio');
@@ -1168,7 +1256,7 @@ async function handleCheckoutFormSubmit(e) {
   // Guardar dados para uso posterior
   checkoutData = {
     customerName,
-    customerPhone,
+    customerPhone: normalizedPhone,
     deliveryAddress,
     items
   };

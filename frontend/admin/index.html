@@ -86,6 +86,20 @@
       table { min-width: 560px; }
     }
   </style>
+  <style>
+    /* Mobile menu styling (only visible on small screens) */
+    .mobile-menu-btn { display: none; background:none; border:none; font-size:20px; }
+    @media (max-width: 768px) {
+      .mobile-menu-btn { display: inline-block; }
+      /* ensure header items remain aligned when menu button present */
+      header { display: flex; align-items: center; gap: 8px; }
+    }
+    /* overlay hidden by default, shown by removing .hidden class */
+    .mobile-menu-backdrop { backdrop-filter: blur(2px); }
+    @media (min-width: 769px) {
+      .mobile-menu-panel, #mobile-menu-overlay { display: none !important; }
+    }
+  </style>
 </head>
 <body class="bg-gray-50">
   <div class="flex h-screen">
@@ -110,6 +124,8 @@
     <main class="flex-1 ml-64 flex flex-col overflow-hidden">
       <!-- Header -->
       <header class="bg-white shadow-md p-6 border-b border-gray-200 flex justify-between items-center">
+        <!-- Mobile menu button (visible only on small screens) -->
+        <button id="mobile-menu-btn" aria-label="Abrir menu" class="mobile-menu-btn mr-3">☰</button>
         <h2 class="text-3xl font-bold text-gray-800">Painel de Administração</h2>
         <div class="flex items-center gap-4">
           <div class="text-right">
@@ -313,6 +329,22 @@
   </div>
 
   <script src="app.js"></script>
+  <!-- Mobile menu overlay -->
+  <div id="mobile-menu-overlay" class="hidden fixed inset-0 z-70">
+    <div class="mobile-menu-backdrop absolute inset-0 bg-black opacity-60"></div>
+    <div class="mobile-menu-panel absolute top-16 left-4 right-4 bg-white rounded-lg shadow-lg p-4">
+      <div class="flex justify-between items-center mb-4">
+        <div class="font-bold text-lg">Menu</div>
+        <button id="mobile-menu-close" class="text-gray-700 text-2xl">×</button>
+      </div>
+      <nav class="mobile-nav flex flex-col gap-2">
+        <button class="mobile-nav-btn px-4 py-3 text-left rounded hover:bg-gray-100" data-section="dashboard">📊 Dashboard</button>
+        <button class="mobile-nav-btn px-4 py-3 text-left rounded hover:bg-gray-100" data-section="products">📦 Produtos</button>
+        <button class="mobile-nav-btn px-4 py-3 text-left rounded hover:bg-gray-100" data-section="orders">📋 Pedidos</button>
+        <button class="mobile-nav-btn px-4 py-3 text-left rounded hover:bg-gray-100" data-section="reports">📈 Relatórios</button>
+      </nav>
+    </div>
+  </div>
   <!-- Admin toast (substitui alert()) -->
   <div id="admin-toast" class="fixed bottom-6 right-6 z-60 hidden max-w-sm">
     <div id="admin-toast-card" class="bg-gray-900 text-white rounded-lg shadow-lg p-4 flex items-start gap-3">

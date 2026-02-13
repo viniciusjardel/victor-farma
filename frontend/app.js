@@ -1205,7 +1205,9 @@ async function handleCheckoutFormSubmit(e) {
 
   const customerName = (document.getElementById('customer-name').value || '').trim();
   const customerPhone = (document.getElementById('customer-phone').value || '').trim();
-  const deliveryAddress = (document.getElementById('delivery-address').value || '').trim();
+  const deliveryStreet = (document.getElementById('delivery-street').value || '').trim();
+  const deliveryNumber = (document.getElementById('delivery-number').value || '').trim();
+  const deliveryAddress = `${deliveryStreet} ${deliveryNumber}`.trim();
 
   // ✅ VALIDAR DADOS ANTES DE PROSSEGUIR
   console.log('🔍 Validando dados do checkout:', {
@@ -1236,9 +1238,22 @@ async function handleCheckoutFormSubmit(e) {
     return;
   }
 
-  if (!deliveryAddress) {
-    notify.error('Por favor, preencha o endereço de entrega');
-    console.error('❌ Endereço vazio');
+  if (!deliveryStreet) {
+    notify.error('Por favor, preencha o nome da rua');
+    console.error('❌ Rua vazia');
+    return;
+  }
+
+  if (!deliveryNumber) {
+    notify.error('Por favor, preencha o número');
+    console.error('❌ Número vazio');
+    return;
+  }
+
+  // Opcional: garantir que número seja composto por dígitos (aceitar letras? ajustar conforme regra)
+  if (!/^\d+[A-Za-z]?$/i.test(deliveryNumber)) {
+    notify.error('Número do endereço inválido');
+    console.error('❌ Número inválido:', deliveryNumber);
     return;
   }
 
@@ -1258,6 +1273,8 @@ async function handleCheckoutFormSubmit(e) {
     customerName,
     customerPhone: normalizedPhone,
     deliveryAddress,
+    deliveryStreet,
+    deliveryNumber,
     items
   };
 

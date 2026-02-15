@@ -90,6 +90,13 @@ module.exports = (pool) => {
         total += productResult.rows[0].price * item.quantity;
       }
 
+      // VALIDAÇÃO: valor mínimo do pedido
+      const MIN_ORDER_TOTAL = 10; // R$ 10,00
+      if (total < MIN_ORDER_TOTAL) {
+        console.warn(`Pedido rejeitado: total R$ ${total} abaixo do mínimo R$ ${MIN_ORDER_TOTAL}`);
+        return res.status(400).json({ error: `Valor mínimo de compra: R$ ${MIN_ORDER_TOTAL.toFixed(2)}` });
+      }
+
       // Criar pedido
       const orderId = uuidv4();
       const createdAt = new Date().toISOString();

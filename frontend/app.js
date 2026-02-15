@@ -1059,7 +1059,6 @@ function updateCartDisplay() {
     return;
   }
 
-  checkoutBtn.disabled = false;
   let total = 0;
 
   cartItemsDiv.innerHTML = cart.map(item => {
@@ -1092,6 +1091,24 @@ function updateCartDisplay() {
   }).join('');
 
   cartTotalSpan.textContent = `R$ ${total.toFixed(2)}`;
+
+  // Validação de valor mínimo: R$ 10,00
+  try {
+    const minTotal = 10;
+    const minMsgEl = document.getElementById('cart-minimum-msg');
+    if (total < minTotal) {
+      checkoutBtn.disabled = true;
+      if (minMsgEl) {
+        minMsgEl.classList.remove('hidden');
+        minMsgEl.textContent = `Valor mínimo de compra: R$ ${minTotal.toFixed(2)}`;
+      }
+    } else {
+      checkoutBtn.disabled = false;
+      if (minMsgEl) minMsgEl.classList.add('hidden');
+    }
+  } catch (e) {
+    console.warn('Erro ao aplicar validação de valor mínimo do carrinho', e);
+  }
 }
 
 // Animar mensagem do carrinho para o centro da tela
@@ -1314,6 +1331,14 @@ async function handleCheckoutFormSubmit(e) {
   if (cart.length === 0) {
     notify.error('Seu carrinho está vazio');
     console.error('❌ Carrinho vazio');
+    return;
+  }
+
+  // Verificar valor mínimo do pedido (R$ 10,00)
+  const cartTotal = cart.reduce((s, it) => s + parseFloat(it.subtotal || 0), 0);
+  if (cartTotal < 10) {
+    notify.error('O valor mínimo de compra é R$ 10,00. Adicione mais produtos ao carrinho.');
+    console.error('❌ Valor do carrinho abaixo do mínimo:', cartTotal);
     return;
   }
 

@@ -16,26 +16,14 @@ window.addEventListener('unhandledrejection', function (e) {
 
 let userId = localStorage.getItem('userId') || generateUserId();
 let cart = [];
-let products = [];
-let currentOrder = null;
-let paymentPollingInterval = null;
-let currentPixOverlay = null; // ← Guardar referência do modal PIX atual
 
 // Gerar ID do usuário
 function generateUserId() {
   const id = 'user_' + Math.random().toString(36).substr(2, 9);
-  localStorage.setItem('userId', id);
-  return id;
-}
-
 // Elementos DOM
 const productsContainer = document.getElementById('products-container');
 const cartBtn = document.getElementById('cart-btn');
 const cartModal = document.getElementById('cart-modal');
-const checkoutModal = document.getElementById('checkout-modal');
-const paymentModal = document.getElementById('payment-modal');
-const confirmationModal = document.getElementById('confirmation-modal');
-const cartItemsDiv = document.getElementById('cart-items');
 const cartCountSpan = document.getElementById('cart-count');
 const cartTotalSpan = document.getElementById('cart-total');
 const checkoutBtn = document.getElementById('checkout-btn');
@@ -1059,14 +1047,26 @@ function updateCartDisplay() {
     return;
   }
 
+<<<<<<< HEAD
+=======
+  checkoutBtn.disabled = false;
+>>>>>>> 2e85968221581f19dcd6012ed2c3cab3671cff88
   let total = 0;
 
   cartItemsDiv.innerHTML = cart.map(item => {
     total += parseFloat(item.subtotal);
+<<<<<<< HEAD
+=======
+    
+>>>>>>> 2e85968221581f19dcd6012ed2c3cab3671cff88
     // Encontrar o estoque disponível do produto
     const product = products.find(p => p.id === item.product_id);
     const maxQuantity = product ? product.stock : 0;
     const canIncrease = item.quantity < maxQuantity;
+<<<<<<< HEAD
+=======
+    
+>>>>>>> 2e85968221581f19dcd6012ed2c3cab3671cff88
     return `
       <div class="border-b py-3 px-4 hover:bg-gray-50 text-sm">
         <div class="flex justify-between items-start gap-2 mb-2">
@@ -1089,6 +1089,7 @@ function updateCartDisplay() {
   }).join('');
 
   cartTotalSpan.textContent = `R$ ${total.toFixed(2)}`;
+<<<<<<< HEAD
   // Bloquear botão de finalizar compra se total < 10
   if (total < 10) {
     checkoutBtn.disabled = true;
@@ -1097,6 +1098,8 @@ function updateCartDisplay() {
     checkoutBtn.disabled = false;
     checkoutBtn.title = '';
   }
+=======
+>>>>>>> 2e85968221581f19dcd6012ed2c3cab3671cff88
 }
 
 // Animar mensagem do carrinho para o centro da tela
@@ -1316,23 +1319,29 @@ async function handleCheckoutFormSubmit(e) {
     return;
   }
 
+<<<<<<< HEAD
   // Calcular total do carrinho
   let totalPedido = 0;
   for (const item of cart) {
     totalPedido += parseFloat(item.subtotal);
   }
 
+=======
+>>>>>>> 2e85968221581f19dcd6012ed2c3cab3671cff88
   if (cart.length === 0) {
     notify.error('Seu carrinho está vazio');
     console.error('❌ Carrinho vazio');
     return;
   }
 
+<<<<<<< HEAD
   if (totalPedido < 10) {
     notify.error('O valor mínimo do pedido é R$ 10,00');
     return;
   }
 
+=======
+>>>>>>> 2e85968221581f19dcd6012ed2c3cab3671cff88
   const items = cart.map(item => ({
     productId: item.product_id,
     quantity: item.quantity

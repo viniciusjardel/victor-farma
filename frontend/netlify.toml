@@ -1,0 +1,14 @@
+[build]
+  command = "echo 'Frontend deploy pronto'"
+  publish = "."
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+
+[context.production]
+  environment = { API_URL = "https://seu-backend-render.onrender.com/api" }
+
+[context.deploy-preview]
+  environment = { API_URL = "https://seu-backend-render.onrender.com/api" }

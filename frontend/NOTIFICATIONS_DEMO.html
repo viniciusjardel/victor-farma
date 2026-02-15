@@ -1,0 +1,462 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Notification System Demo - Victor Farma</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      padding: 20px;
+    }
+
+    .container {
+      max-width: 900px;
+      margin: 0 auto;
+      background: white;
+      border-radius: 12px;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+      overflow: hidden;
+    }
+
+    header {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      padding: 40px 20px;
+      text-align: center;
+    }
+
+    header h1 {
+      font-size: 28px;
+      margin-bottom: 10px;
+    }
+
+    header p {
+      opacity: 0.9;
+      font-size: 14px;
+    }
+
+    .content {
+      padding: 40px;
+    }
+
+    .section {
+      margin-bottom: 40px;
+    }
+
+    .section-title {
+      font-size: 18px;
+      font-weight: 600;
+      color: #333;
+      margin-bottom: 20px;
+      padding-bottom: 10px;
+      border-bottom: 2px solid #667eea;
+    }
+
+    .button-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 10px;
+      margin-bottom: 20px;
+    }
+
+    button {
+      padding: 12px 20px;
+      border: none;
+      border-radius: 6px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      font-size: 14px;
+    }
+
+    /* Success Buttons */
+    .btn-success {
+      background-color: #28a745;
+      color: white;
+    }
+
+    .btn-success:hover {
+      background-color: #218838;
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(40, 167, 69, 0.3);
+    }
+
+    /* Error Buttons */
+    .btn-error {
+      background-color: #dc3545;
+      color: white;
+    }
+
+    .btn-error:hover {
+      background-color: #c82333;
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(220, 53, 69, 0.3);
+    }
+
+    /* Warning Buttons */
+    .btn-warning {
+      background-color: #ffc107;
+      color: #333;
+    }
+
+    .btn-warning:hover {
+      background-color: #e0a800;
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(255, 193, 7, 0.3);
+    }
+
+    /* Info Buttons */
+    .btn-info {
+      background-color: #17a2b8;
+      color: white;
+    }
+
+    .btn-info:hover {
+      background-color: #138496;
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(23, 162, 184, 0.3);
+    }
+
+    /* Control Buttons */
+    .btn-control {
+      background-color: #6c757d;
+      color: white;
+    }
+
+    .btn-control:hover {
+      background-color: #5a6268;
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(108, 117, 125, 0.3);
+    }
+
+    .form-group {
+      margin-bottom: 20px;
+    }
+
+    .form-group label {
+      display: block;
+      margin-bottom: 8px;
+      font-weight: 600;
+      color: #333;
+      font-size: 14px;
+    }
+
+    .form-group input,
+    .form-group textarea {
+      width: 100%;
+      padding: 10px 12px;
+      border: 1px solid #ddd;
+      border-radius: 6px;
+      font-family: inherit;
+      font-size: 14px;
+    }
+
+    .form-group textarea {
+      resize: vertical;
+      min-height: 80px;
+    }
+
+    .form-group input:focus,
+    .form-group textarea:focus {
+      outline: none;
+      border-color: #667eea;
+      box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+    }
+
+    .info-box {
+      background: #f0f4ff;
+      border-left: 4px solid #667eea;
+      padding: 15px;
+      border-radius: 6px;
+      margin-bottom: 20px;
+      font-size: 14px;
+      color: #333;
+    }
+
+    .info-box strong {
+      color: #667eea;
+    }
+
+    .code-block {
+      background: #f5f5f5;
+      border-radius: 6px;
+      padding: 15px;
+      font-family: 'Courier New', monospace;
+      font-size: 13px;
+      overflow-x: auto;
+      margin-top: 10px;
+      border-left: 4px solid #667eea;
+    }
+
+    .features {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 15px;
+      margin-top: 20px;
+    }
+
+    .feature {
+      background: #f9f9f9;
+      padding: 15px;
+      border-radius: 6px;
+      border-left: 4px solid #667eea;
+    }
+
+    .feature strong {
+      color: #667eea;
+    }
+
+    .feature small {
+      display: block;
+      color: #666;
+      margin-top: 5px;
+    }
+
+    @media (max-width: 640px) {
+      .content {
+        padding: 20px;
+      }
+
+      header {
+        padding: 20px 10px;
+      }
+
+      header h1 {
+        font-size: 22px;
+      }
+
+      .button-grid {
+        grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>🔔 Sistema de Notificações Demo</h1>
+      <p>Teste interativo do novo sistema de Toast Messages</p>
+    </header>
+
+    <div class="content">
+      <!-- Basic Tests -->
+      <div class="section">
+        <h2 class="section-title">✨ Testes Rápidos</h2>
+
+        <div class="info-box">
+          <strong>💡 Dica:</strong> Clique nos botões abaixo para ver as notificações em ação no canto superior direito.
+        </div>
+
+        <h3 style="font-size: 14px; color: #555; margin-top: 20px; margin-bottom: 10px;">Success (Verde)</h3>
+        <div class="button-grid">
+          <button class="btn-success" onclick="notify.success('Produto adicionado! ✓')">Adicionar Produto</button>
+          <button class="btn-success" onclick="notify.success('Pagamento aprovado!', 4000)">Pagamento OK</button>
+          <button class="btn-success" onclick="notify.success('Login realizado com sucesso!')">Login OK</button>
+          <button class="btn-success" onclick="notify.success('Pedido criado! ID: #12345')">Pedido Criado</button>
+        </div>
+
+        <h3 style="font-size: 14px; color: #555; margin-top: 20px; margin-bottom: 10px;">Error (Vermelho)</h3>
+        <div class="button-grid">
+          <button class="btn-error" onclick="notify.error('Erro ao adicionar ao carrinho')">Erro Carrinho</button>
+          <button class="btn-error" onclick="notify.error('Falha na conexão com servidor', 6000)">Erro Conexão</button>
+          <button class="btn-error" onclick="notify.error('Email ou senha incorretos')">Erro Auth</button>
+          <button class="btn-error" onclick="notify.error('Erro ao gerar PIX')">Erro PIX</button>
+        </div>
+
+        <h3 style="font-size: 14px; color: #555; margin-top: 20px; margin-bottom: 10px;">Warning (Amarelo)</h3>
+        <div class="button-grid">
+          <button class="btn-warning" onclick="notify.warning('Pagamento cancelado')">Cancelado</button>
+          <button class="btn-warning" onclick="notify.warning('Estoque baixo para este produto')">Estoque Baixo</button>
+          <button class="btn-warning" onclick="notify.warning('Dados expirados. Recarregue a página')">Dados Expirados</button>
+          <button class="btn-warning" onclick="notify.warning('Operação pode demorar...')">Aguarde</button>
+        </div>
+
+        <h3 style="font-size: 14px; color: #555; margin-top: 20px; margin-bottom: 10px;">Info (Azul)</h3>
+        <div class="button-grid">
+          <button class="btn-info" onclick="notify.info('Quantidade atualizada')">Qtd Atualizada</button>
+          <button class="btn-info" onclick="notify.info('Produto removido do carrinho')">Removido</button>
+          <button class="btn-info" onclick="notify.info('Carregando produtos...')">Loading</button>
+          <button class="btn-info" onclick="notify.info('Configurações salvas')">Salvo</button>
+        </div>
+      </div>
+
+      <!-- Advanced Tests -->
+      <div class="section">
+        <h2 class="section-title">🚀 Testes Avançados</h2>
+
+        <div class="form-group">
+          <label>Tipo de Notificação:</label>
+          <select id="notificationType" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 6px;">
+            <option value="success">✓ Success (Verde)</option>
+            <option value="error">✕ Error (Vermelho)</option>
+            <option value="warning">⚠ Warning (Amarelo)</option>
+            <option value="info">ℹ Info (Azul)</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label>Mensagem:</label>
+          <textarea id="notificationMessage" placeholder="Digite sua mensagem aqui...">Minha mensagem de teste!</textarea>
+        </div>
+
+        <div class="form-group">
+          <label>Duração (ms):</label>
+          <input type="number" id="notificationDuration" value="4000" min="0" placeholder="0 = Nunca fecha automaticamente">
+          <small style="color: #666; display: block; margin-top: 5px;">Valores comuns: success=3000, error=5000, warning=4000, info=3000</small>
+        </div>
+
+        <button class="btn-info" style="width: 100%; margin-top: 20px;" onclick="sendCustomNotification()">
+          📢 Enviar Notificação Customizada
+        </button>
+      </div>
+
+      <!-- Bulk Tests -->
+      <div class="section">
+        <h2 class="section-title">🎯 Testes de Volume</h2>
+
+        <button class="btn-control" onclick="testMultiple(3)">Enviar 3 Notificações</button>
+        <button class="btn-control" onclick="testMultiple(5)">Enviar 5 Notificações (Max Stack)</button>
+        <button class="btn-control" onclick="testMultiple(8)">Enviar 8 Notificações (Ciclo)</button>
+        <button class="btn-error" onclick="notify.closeAll()" style="width: 100%; margin-top: 10px;">🗑️ Fechar Todas</button>
+      </div>
+
+      <!-- Show Features -->
+      <div class="section">
+        <h2 class="section-title">✅ Recursos Implementados</h2>
+
+        <div class="features">
+          <div class="feature">
+            <strong>🎨 4 Tipos</strong>
+            <small>Success, Error, Warning, Info com cores semânticas</small>
+          </div>
+          <div class="feature">
+            <strong>⏱️ Auto-dismiss</strong>
+            <small>Cada tipo com duração otimizada</small>
+          </div>
+          <div class="feature">
+            <strong>🎬 Animações</strong>
+            <small>Smooth slide in/out com transições CSS</small>
+          </div>
+          <div class="feature">
+            <strong>📱 Responsivo</strong>
+            <small>Desktop, tablet e mobile</small>
+          </div>
+          <div class="feature">
+            <strong>🔒 XSS Safe</strong>
+            <small>HTML escapado automaticamente</small>
+          </div>
+          <div class="feature">
+            <strong>🎮 Interativo</strong>
+            <small>Botões, clique para fechar, callbacks</small>
+          </div>
+          <div class="feature">
+            <strong>⚡ Stack Smart</strong>
+            <small>Máx 5 notificações, remove antigas</small>
+          </div>
+          <div class="feature">
+            <strong>📦 Sem Deps</strong>
+            <small>Vanilla JS puro, zero dependências</small>
+          </div>
+        </div>
+      </div>
+
+      <!-- Code Examples -->
+      <div class="section">
+        <h2 class="section-title">💻 Exemplos de Código</h2>
+
+        <div class="info-box">
+          <strong>Formas de usar:</strong>
+        </div>
+
+        <div class="code-block">// Método direto com tipo
+notify.show('Mensagem', 'success', 3000);</div>
+
+        <div class="code-block">// Helpers (recomendado)
+notify.success('Pronto!');
+notify.error('Erro!');
+notify.warning('Cuidado!');
+notify.info('Info');</div>
+
+        <div class="code-block">// Com callback
+notify.success('Salvo!', 3000, () => {
+  console.log('Notificação fechada!');
+});</div>
+
+        <div class="code-block">// Nunca fecha (0 = eternidade)
+notify.info('Espere...', 0);</div>
+
+        <div class="code-block">// Fechar manualmente
+const id = notify.success('Msg');
+notify.close(id);</div>
+      </div>
+
+      <!-- Info -->
+      <div class="section">
+        <h2 class="section-title">📖 Documentação</h2>
+
+        <div class="info-box">
+          <strong>Arquivos criados:</strong>
+          <ul style="margin-left: 20px; margin-top: 10px;">
+            <li><code>notifications.js</code> - Implementação do sistema</li>
+            <li><code>NOTIFICATIONS_GUIDE.md</code> - Guia completo</li>
+            <li><code>NOTIFICATIONS_SUMMARY.md</code> - Resumo de implementação</li>
+          </ul>
+        </div>
+
+        <div class="info-box" style="margin-top: 15px;">
+          <strong>Integrado em:</strong>
+          <ul style="margin-left: 20px; margin-top: 10px;">
+            <li><code>app.js</code> - Substitui 14 alert() por toasts</li>
+            <li><code>index.html</code> - Carrega notifications.js</li>
+            <li><code>styles.css</code> - Estilização das notificações</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Carregar o sistema de notificações real -->
+  <script src="notifications.js"></script>
+
+  <script>
+    function sendCustomNotification() {
+      const type = document.getElementById('notificationType').value;
+      const message = document.getElementById('notificationMessage').value || 'Mensagem vazia';
+      const duration = parseInt(document.getElementById('notificationDuration').value) || 4000;
+
+      notify[type](message, duration);
+    }
+
+    function testMultiple(count) {
+      const types = ['success', 'error', 'warning', 'info'];
+      const messages = [
+        'Operação realizada!',
+        'Algo deu errado!',
+        'Cuidado com isso!',
+        'Informação importante',
+        'Produto adicionado!',
+        'Erro de conexão',
+        'Estoque baixo',
+        'Alterações salvas!'
+      ];
+
+      for (let i = 0; i < count; i++) {
+        setTimeout(() => {
+          const type = types[i % types.length];
+          const message = messages[i % messages.length];
+          notify[type](`${message} (${i + 1}/${count})`);
+        }, i * 300);
+      }
+    }
+  </script>
+</body>
+</html>

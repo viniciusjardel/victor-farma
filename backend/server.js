@@ -1,0 +1,98 @@
+require('dotenv').config();
+const express = require('express');
+const cors = require('cors');
+const { Pool } = require('pg');
+
+const app = express();
+const PORT = process.env.PORT || 3000;
+
+// Middleware
+app.use(cors());
+app.use(express.json());
+
+// 🔍 Log de DEBUG GLOBAL para TODAS as requisições PATCH
+app.use((req, res, next) => {
+  if (req.method === 'PATCH') {
+    console.log(`\n🔴 [PATCH] ${req.path}`);
+    console.log(`   Body:`, req.body);
+    console.log(`   URL Completa: ${req.baseUrl}${req.path}`);
+  }
+  next();
+});
+
+// Servir arquivos estáticos do frontend
+const path = require('path');
+app.use(express.static(path.join(__dirname, '../frontend')));
+
+// Database connection
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
+});
+
+console.log('🔌 Conectando ao banco de dados...');
+console.log('📌 NODE_ENV:', process.env.NODE_ENV);
+console.log('📌 DATABASE_URL:', process.env.DATABASE_URL ? '✅ Configurado' : '❌ NÃO configurado');
+console.log('📌 PIX_API_URL:', process.env.PIX_API_URL);
+
+// Inicializar tabelas se não existirem
+pool.query(`
+  CREATE TABLE IF NOT EXISTS revenue (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    order_id UUID NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
+    amount DECIMAL(10, 2) NOT NULL,
+    status VARCHAR(50) NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(order_id)
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_revenue_order_id ON revenue(order_id);
+  CREATE INDEX IF NOT EXISTS idx_revenue_created_at ON revenue(created_at);
+`).then(() => {
+  console.log('✅ Tabela de receita verificada/criada');
+}).catch((err) => {
+  console.error('⚠️ Erro ao criar tabela de receita:', err);
+});
+
+// Adicionar coluna payment_status se não existir
+pool.query(`
+  ALTER TABLE orders
+  ADD COLUMN IF NOT EXISTS payment_status VARCHAR(50) DEFAULT 'pendente';
+`).then(() => {
+  console.log('✅ Coluna payment_status verificada/criada');
+}).catch((err) => {
+  console.error('⚠️ Erro ao adicionar coluna payment_status:', err);
+});
+
+// Criar índice para payment_status
+pool.query(`
+  CREATE INDEX IF NOT EXISTS idx_orders_payment_status ON orders(payment_status);
+`).then(() => {
+  console.log('✅ Índice de payment_status verificado/criado');
+}).catch((err) => {
+  console.error('⚠️ Erro ao criar índice:', err);
+});
+
+// Routes
+const authRoutes = require('./routes/auth');
+const productRoutes = require('./routes/products');
+const cartRoutes = require('./routes/cart');
+const orderRoutes = require('./routes/orders');
+const adminRoutes = require('./routes/admin');
+
+app.use('/api/auth', authRoutes);
+app.use('/api/products', productRoutes(pool));
+app.use('/api/cart', cartRoutes(pool));
+app.use('/api/orders', orderRoutes(pool));
+app.use('/api/admin', adminRoutes(pool));
+
+// Health check
+app.get('/health', (req, res) => {
+  res.json({ status: 'OK' });
+});
+
+app.listen(PORT, () => {
+  console.log(`Servidor rodando na porta ${PORT}`);
+});
+
+module.exports = pool;

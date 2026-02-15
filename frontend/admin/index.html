@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Victor Farma - Painel Administrativo</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body { font-family: 'Poppins', system-ui, -apple-system, sans-serif; }
+  </style>
+  <style>
+    /* Admin toast custom styles */
+    #admin-toast { pointer-events: auto; }
+    #admin-toast-card { min-width: 320px; max-width: 420px; box-shadow: 0 8px 30px rgba(0,0,0,0.45); }
+    #admin-toast .hidden { display: none !important; }
+    #admin-toast { transition: transform 200ms ease, opacity 200ms ease; transform: translateY(6px); opacity: 0; }
+    #admin-toast:not(.hidden) { transform: translateY(0); opacity: 1; }
+  </style>
+  <style>
+    /* Transições suaves para troca de seções no painel */
+    .section {
+      transition: opacity 220ms ease, transform 220ms ease;
+      opacity: 0;
+      transform: translateY(8px);
+    }
+    .section.active {
+      opacity: 1;
+      transform: translateY(0);
+    }
+    .section.inactive {
+      pointer-events: none;
+    }
+  </style>
+  
+  <!-- Responsividade específica do painel administrativo (somente ajustes de layout) -->
+  <style>
+    /* Não alterar visual existente fora de breakpoints */
+    @media (max-width: 1024px) {
+      /* Ajuste leve para tablets: permitir sidebar colapsar visualmente */
+      aside { width: 56px; }
+      aside nav .nav-btn { padding-left: 8px; padding-right: 8px; text-align: center; }
+      aside .p-6 { padding: 12px; }
+      main { margin-left: 56px; }
+    }
+
+    @media (max-width: 768px) {
+      /* Layout columnar: sidebar vira topo */
+      .flex.h-screen { flex-direction: column; }
+      aside {
+        position: relative !important;
+        width: 100% !important;
+        height: auto !important;
+        left: 0 !important;
+        top: 0 !important;
+        border-bottom-left-radius: 0;
+        border-bottom-right-radius: 0;
+      }
+      aside nav { display: flex; flex-direction: row; gap: 8px; overflow-x: auto; padding: 8px; }
+      aside nav .nav-btn { flex: 1 0 auto; white-space: nowrap; }
+      aside .border-t { border-top: 1px solid rgba(255,255,255,0.06); }
+
+      /* Main content full width, remove left margin */
+      main { margin-left: 0 !important; }
+
+      /* Header compress */
+      header { padding: 12px; }
+      header h2 { font-size: 1.125rem; }
+
+      /* Cards stack vertically */
+      .grid.md\:grid-cols-3 { grid-template-columns: repeat(1, minmax(0, 1fr)); }
+
+      /* Tables: allow horizontal scroll instead of wrapping */
+      .overflow-hidden { overflow-x: auto; }
+      table { min-width: 680px; }
+
+      /* Modals & dialogs full width on small screens */
+      .modal > div { max-width: 98% !important; margin: 0 1% !important; }
+    }
+
+    @media (max-width: 420px) {
+      /* Very small devices: reduce paddings */
+      header { padding: 10px; }
+      .p-6 { padding: 8px; }
+      .px-6 { padding-left: 12px; padding-right: 12px; }
+      .py-3 { padding-top: 8px; padding-bottom: 8px; }
+      table { min-width: 560px; }
+    }
+  </style>
+  <style>
+    /* Mobile menu styling (only visible on small screens) */
+    .mobile-menu-btn { display: none; background:none; border:none; font-size:20px; }
+    @media (max-width: 768px) {
+      .mobile-menu-btn { display: inline-block; }
+      /* ensure header items remain aligned when menu button present */
+      header { display: flex; align-items: center; gap: 8px; }
+    }
+    /* overlay hidden by default, shown by removing .hidden class */
+    .mobile-menu-backdrop { backdrop-filter: blur(2px); }
+    @media (min-width: 769px) {
+      .mobile-menu-panel, #mobile-menu-overlay { display: none !important; }
+    }
+  </style>
+</head>
+<body class="bg-gray-50">
+  <div class="flex h-screen">
+    <!-- Sidebar -->
+    <aside class="w-64 bg-gradient-to-b from-green-700 to-green-600 text-white shadow-lg flex flex-col fixed h-screen left-0 top-0">
+      <div class="p-6 border-b border-green-500">
+        <h1 class="text-2xl font-bold">Victor Farma</h1>
+        <p class="text-green-100 text-sm">Admin</p>
+      </div>
+      <nav class="flex-1 p-4 space-y-2 overflow-y-auto">
+        <button class="nav-btn w-full text-left px-4 py-3 rounded-lg transition-all bg-green-500 hover:bg-green-400 font-semibold active" data-section="dashboard">📊 Dashboard</button>
+        <button class="nav-btn w-full text-left px-4 py-3 rounded-lg transition-all hover:bg-green-500 font-semibold" data-section="products">📦 Produtos</button>
+        <button class="nav-btn w-full text-left px-4 py-3 rounded-lg transition-all hover:bg-green-500 font-semibold" data-section="orders">📋 Pedidos</button>
+        <button class="nav-btn w-full text-left px-4 py-3 rounded-lg transition-all hover:bg-green-500 font-semibold" data-section="reports">📈 Relatórios</button>
+      </nav>
+      <div class="border-t border-green-500 p-4">
+        <button onclick="handleLogout()" class="w-full text-left px-4 py-3 rounded-lg transition-all hover:bg-red-500 font-semibold text-red-100 hover:text-white">🚪 Sair</button>
+      </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="flex-1 ml-64 flex flex-col overflow-hidden">
+      <!-- Header -->
+      <header class="bg-white shadow-md p-6 border-b border-gray-200 flex justify-between items-center">
+        <!-- Mobile menu button (visible only on small screens) -->
+        <button id="mobile-menu-btn" aria-label="Abrir menu" class="mobile-menu-btn mr-3">☰</button>
+        <h2 class="text-3xl font-bold text-gray-800">Painel de Administração</h2>
+        <div class="flex items-center gap-4">
+          <div class="text-right">
+            <div class="text-sm text-gray-500">Conectado como</div>
+            <div class="text-gray-700 font-semibold">Admin</div>
+          </div>
+          <span id="current-time" class="text-gray-600 font-semibold"></span>
+        </div>
+      </header>
+
+      <!-- Content Area -->
+      <div class="flex-1 overflow-y-auto p-6">
+        <!-- Dashboard Section -->
+        <section id="dashboard-section" class="section active">
+          <h3 class="text-2xl font-bold text-gray-800 mb-6">Dashboard</h3>
+          
+          <!-- Cards Grid -->
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+            <div class="bg-white rounded-lg shadow-md p-6 border-l-4 border-green-600">
+              <div class="text-gray-600 text-sm font-semibold uppercase">Total de Pedidos</div>
+              <div class="text-4xl font-bold text-green-600 mt-2" id="total-orders">0</div>
+            </div>
+            <div class="bg-white rounded-lg shadow-md p-6 border-l-4 border-red-600">
+              <div class="text-gray-600 text-sm font-semibold uppercase">Receita Total</div>
+              <div class="text-4xl font-bold text-red-600 mt-2" id="total-revenue">R$ 0.00</div>
+            </div>
+            <div class="bg-white rounded-lg shadow-md p-6 border-l-4 border-blue-600">
+              <div class="text-gray-600 text-sm font-semibold uppercase">Total de Produtos</div>
+              <div class="text-4xl font-bold text-blue-600 mt-2" id="total-products">0</div>
+            </div>
+          </div>
+
+          <!-- Low Stock Section -->
+          <div class="bg-white rounded-lg shadow-md p-6">
+            <h4 class="text-xl font-bold text-gray-800 mb-4">Produtos com Estoque Baixo</h4>
+            <div id="low-stock-list" class="space-y-2">
+              <p class="text-gray-500 text-center py-8">Carregando...</p>
+            </div>
+          </div>
+        </section>
+
+        <!-- Products Section -->
+        <section id="products-section" class="section hidden">
+          <h3 class="text-2xl font-bold text-gray-800 mb-6">Gerenciamento de Produtos</h3>
+          
+          <div class="flex gap-4 mb-6">
+            <input type="text" id="product-search" placeholder="Buscar produto..." class="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500">
+            <button onclick="openAddProductModal()" class="px-6 py-2 bg-gradient-to-r from-green-600 to-green-700 text-white rounded-lg hover:from-green-700 hover:to-green-800 font-bold transition-all">+ Novo Produto</button>
+          </div>
+
+          <div class="bg-white rounded-lg shadow-md overflow-hidden">
+            <table class="w-full">
+              <thead class="bg-gray-100 border-b border-gray-300">
+                <tr class="text-left">
+                  <th class="px-6 py-3 font-bold text-gray-800">Nome</th>
+                  <th class="px-6 py-3 font-bold text-gray-800">Descrição</th>
+                  <th class="px-6 py-3 font-bold text-gray-800">Preço</th>
+                  <th class="px-6 py-3 font-bold text-gray-800">Estoque</th>
+                  <th class="px-6 py-3 font-bold text-gray-800">Categoria</th>
+                  <th class="px-6 py-3 font-bold text-gray-800">Ações</th>
+                </tr>
+              </thead>
+              <tbody id="products-tbody">
+                <tr><td colspan="6" class="px-6 py-4 text-center text-gray-500">Carregando...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <!-- Orders Section -->
+        <section id="orders-section" class="section hidden">
+          <h3 class="text-2xl font-bold text-gray-800 mb-6">Gerenciamento de Pedidos</h3>
+
+          <div class="mb-6 flex justify-between items-center gap-4">
+            <select id="order-status-filter" class="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500">
+              <option value="">Todos os status</option>
+              <option value="em preparação">Em preparação</option>
+              <option value="em rota de entrega">Em rota de entrega</option>
+              <option value="entregue">Entregue</option>
+              <option value="cancelado">Cancelado</option>
+            </select>
+            
+            <!-- Botão temporário para deletar todos os pedidos -->
+            <button onclick="deleteAllOrders()" class="px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-semibold rounded-lg transition-colors text-sm" title="⚠️ TEMPORÁRIO: Deleta todos os pedidos (use apenas em desenvolvimento)">
+              🗑️ Limpar Pedidos
+            </button>
+          </div>
+
+          <div class="bg-white rounded-lg shadow-md overflow-hidden">
+            <table class="w-full">
+              <thead class="bg-gray-100 border-b border-gray-300">
+                <tr class="text-left">
+                  <th class="px-6 py-3 font-bold text-gray-800">ID do Pedido</th>
+                  <th class="px-6 py-3 font-bold text-gray-800">Cliente</th>
+                  <th class="px-6 py-3 font-bold text-gray-800">Telefone</th>
+                  <th class="px-6 py-3 font-bold text-gray-800">Total</th>
+                  <th class="px-6 py-3 font-bold text-gray-800">Status do Pedido</th>
+                  <th class="px-6 py-3 font-bold text-gray-800">Status de Pagamento</th>
+                  <th class="px-6 py-3 font-bold text-gray-800">Ações</th>
+                </tr>
+              </thead>
+              <tbody id="orders-tbody">
+                <tr><td colspan="7" class="px-6 py-4 text-center text-gray-500">Carregando...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <!-- Reports Section -->
+        <section id="reports-section" class="section hidden">
+          <h3 class="text-2xl font-bold text-gray-800 mb-6">Relatórios</h3>
+
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div class="bg-white rounded-lg shadow-md p-6">
+              <h4 class="text-xl font-bold text-gray-800 mb-4">Vendas Últimos 30 Dias</h4>
+              <div id="sales-report" class="space-y-2">
+                <p class="text-gray-500 text-center py-8">Carregando...</p>
+              </div>
+            </div>
+
+            <div class="bg-white rounded-lg shadow-md p-6">
+              <h4 class="text-xl font-bold text-gray-800 mb-4">Produtos Mais Vendidos</h4>
+              <div id="top-products" class="space-y-2">
+                <p class="text-gray-500 text-center py-8">Carregando...</p>
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
+    </main>
+  </div>
+
+  <!-- Modals -->
+  <!-- Add/Edit Product Modal -->
+  <div id="product-modal" class="modal hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+    <div class="bg-white rounded-lg shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+      <div class="flex justify-between items-center p-6 border-b border-gray-200 sticky top-0 bg-white">
+        <h2 id="product-modal-title" class="text-2xl font-bold text-gray-800">Novo Produto</h2>
+        <button class="close-modal text-2xl text-gray-500 hover:text-gray-700 font-bold">&times;</button>
+      </div>
+      <form id="product-form" class="p-6 space-y-4">
+        <input type="hidden" id="product-id">
+        
+        <div>
+          <label for="product-name" class="block text-gray-700 font-semibold mb-2">Nome do Produto*</label>
+          <input type="text" id="product-name" required class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500">
+        </div>
+
+        <div>
+          <label for="product-description" class="block text-gray-700 font-semibold mb-2">Descrição</label>
+          <textarea id="product-description" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 h-24 resize-none"></textarea>
+        </div>
+
+        <div class="grid grid-cols-2 gap-4">
+          <div>
+            <label for="product-price" class="block text-gray-700 font-semibold mb-2">Preço (R$)*</label>
+            <input type="number" id="product-price" step="0.01" required class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500">
+          </div>
+          <div>
+            <label for="product-stock" class="block text-gray-700 font-semibold mb-2">Estoque*</label>
+            <input type="number" id="product-stock" min="0" required class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500">
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-4">
+          <div>
+            <label for="product-category" class="block text-gray-700 font-semibold mb-2">Categoria</label>
+            <select id="product-category" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500">
+              <option value="">Selecione uma categoria</option>
+              <option value="medicamentos">Medicamentos</option>
+              <option value="higiene">Higiene</option>
+              <option value="vitaminas">Vitaminas</option>
+              <option value="cosmeticos">Cosméticos</option>
+            </select>
+          </div>
+          <div>
+            <label for="product-image" class="block text-gray-700 font-semibold mb-2">URL da Imagem</label>
+            <input type="url" id="product-image" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500">
+          </div>
+        </div>
+
+        <div class="flex gap-4 pt-4 border-t border-gray-200">
+          <button type="button" class="flex-1 px-4 py-2 bg-gray-500 hover:bg-gray-600 text-white rounded-lg font-bold transition-colors" onclick="closeProductModal()">Cancelar</button>
+          <button type="submit" class="flex-1 px-4 py-2 bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white rounded-lg font-bold transition-all">Salvar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- View Order Modal -->
+  <div id="order-modal" class="modal hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+    <div class="bg-white rounded-lg shadow-2xl max-w-3xl w-full max-h-[90vh] overflow-y-auto">
+      <div class="flex justify-between items-center p-6 border-b border-gray-200 sticky top-0 bg-white">
+        <h2 class="text-2xl font-bold text-gray-800">Detalhes do Pedido</h2>
+        <button class="close-modal text-2xl text-gray-500 hover:text-gray-700 font-bold">&times;</button>
+      </div>
+      <div id="order-modal-content" class="p-6">
+        <p class="text-gray-500 text-center py-8">Carregando...</p>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+  <!-- Mobile menu overlay -->
+  <div id="mobile-menu-overlay" class="hidden fixed inset-0 z-70">
+    <div class="mobile-menu-backdrop absolute inset-0 bg-black opacity-60"></div>
+    <div class="mobile-menu-panel absolute top-16 left-4 right-4 bg-white rounded-lg shadow-lg p-4">
+      <div class="flex justify-between items-center mb-4">
+        <div class="font-bold text-lg">Menu</div>
+        <button id="mobile-menu-close" class="text-gray-700 text-2xl">×</button>
+      </div>
+      <nav class="mobile-nav flex flex-col gap-2">
+        <button class="mobile-nav-btn px-4 py-3 text-left rounded hover:bg-gray-100" data-section="dashboard">📊 Dashboard</button>
+        <button class="mobile-nav-btn px-4 py-3 text-left rounded hover:bg-gray-100" data-section="products">📦 Produtos</button>
+        <button class="mobile-nav-btn px-4 py-3 text-left rounded hover:bg-gray-100" data-section="orders">📋 Pedidos</button>
+        <button class="mobile-nav-btn px-4 py-3 text-left rounded hover:bg-gray-100" data-section="reports">📈 Relatórios</button>
+      </nav>
+    </div>
+  </div>
+  <!-- Admin toast (substitui alert()) -->
+  <div id="admin-toast" class="fixed bottom-6 right-6 z-60 hidden max-w-sm">
+    <div id="admin-toast-card" class="bg-gray-900 text-white rounded-lg shadow-lg p-4 flex items-start gap-3">
+      <div id="admin-toast-icon" class="mt-1"></div>
+      <div class="flex-1">
+        <div id="admin-toast-message" class="text-sm"></div>
+      </div>
+      <div class="flex items-center">
+        <button id="admin-toast-ok" class="ml-3 bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded">OK</button>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
